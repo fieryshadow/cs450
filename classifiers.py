@@ -35,6 +35,28 @@ def load_from_file(filename):
 
     return DataHolder([], [], []) # placeholder
 
+def parse_args():
+    collected_data = classifier = data_split = k_folds = None
+    algorithm_matcher = { 'kNN': KNearestNeighbors, 'HC': HardCoded }
+    for arg in sys.argv[1:]:
+        if arg.startswith('-A'):
+            classifier = algorithm_matcher[arg[2:]]
+        elif arg.startswith('-S'):
+            data_split = float(arg[2:])
+        elif arg.startswith('-D'):
+            dataset_name = arg[2:]
+            if dataset_name == 'iris':
+                collected_data = datasets.load_iris()
+            elif dataset_name.startswith('file='):
+                collected_data = load_from_file(dataset_name[5:])
+        elif arg.startswith('-C'):
+            k_folds = int(arg[2:])
+
+    if collected_data is None: collected_data = datasets.load_iris()
+    if classifier is None: classifier = HardCoded
+    if data_split is None: data_split = .7
+    return collected_data, classifier, data_split, k_folds
+
 def cross_val_score(classifier, data, target, folds):
     k = max(0, min(folds, len(data)))
     step = len(data) // k
@@ -51,44 +73,28 @@ def cross_val_score(classifier, data, target, folds):
         results[pos] = metrics.accuracy_score(test_key, prediction)
     return results
 
-def main():
-    dataset = classifier = train_test_split = k_folds = None
-    algorithm_matcher = { 'kNN': KNearestNeighbors, 'HC': HardCoded }
-    for arg in sys.argv[1:]:
-        if arg.startswith('-A'):
-            classifier = algorithm_matcher[arg[2:]]
-        elif arg.startswith('-S'):
-            train_test_split = float(arg[2:])
-        elif arg.startswith('-D'):
-            dataset_name = arg[2:]
-            if dataset_name == 'iris':
-                dataset = datasets.load_iris()
-            elif dataset_name.startswith('file='):
-                dataset = load_from_file(dataset_name[5:])
-        elif arg.startswith('-C'):
-            k_folds = int(arg[2:])
+def train_test_score(classifier, data, target, split_ratio):
+    split_point  = round(split_ratio * len(data))
+    train_set =   data[:split_point]
+    train_key = target[:split_point]
+    test_set  =   data[split_point:]
+    test_key  = target[split_point:]
 
-    if dataset is None: dataset = datasets.load_iris()
-    if classifier is None: classifier = HardCoded
-    collected_data = list(zip(dataset.data, dataset.target))
-    random.shuffle(collected_data)
-    data, target = zip(*collected_data)
+    learner = classifier()
+    learner.train(train_set, train_key)
+    prediction = learner.predict(test_set)
+    return metrics.accuracy_score(test_key, prediction)
+
+def main():
+    collected_data, classifier, data_split, k_folds = parse_args()
+    randomized_data = list(zip(collected_data.data, collected_data.target))
+    random.shuffle(randomized_data)
+    data, target = zip(*randomized_data)
 
     if k_folds and k_folds > 1:
         accuracy = cross_val_score(classifier, data, target, k_folds).mean()
     else:
-        if train_test_split is None: train_test_split = .7
-        learner = classifier()
-
-        split_point  = round(train_test_split * len(data))
-        train_set =   data[:split_point]
-        train_key = target[:split_point]
-        test_set  =   data[split_point:]
-        test_key  = target[split_point:]
-
-        learner.train(train_set, train_key)
-        prediction = learner.predict(test_set)
-        accuracy = metrics.accuracy_score(test_key, prediction)
+        accuracy = train_test_score(classifier, data, target, data_split)
 
     percentage = int(round(100 * accuracy))
     print("The {} classifier was {}% accurate.".format(
