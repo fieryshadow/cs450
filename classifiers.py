@@ -14,16 +14,36 @@ class HardCoded:
     def predict(self, data):
         return [self.targets[0] for i in data]
 
-class KNearestNeighbors:
+def make_k_nearest(k):
+    def KNearestNeighbors():
+        return _KNearestNeighbors(k)
+    return KNearestNeighbors
+
+class _KNearestNeighbors:
     """The k-Nearest Neighbors algorithm"""
-    def __init__(self):
+    def __init__(self, k):
+        self.k = k
         self.targets = []
 
     def train(self, data, answers):
-        self.targets.extend(set(answers))
+        self.targets = list(zip(data, answers))
 
     def predict(self, data):
-        return [self.targets[0] for i in data] # placeholder
+        k = self.k
+        prediction = []
+        t_data = self.targets
+        for item in data:
+            k_nearest = []
+            for t_item, t_answer in t_data:
+                rank = ((item - t_item)**2).sum()
+                if len(k_nearest) < k or rank < k_nearest[-1][0]:
+                    k_nearest.append((rank, t_item, t_answer))
+                    k_nearest = sorted(k_nearest, key=lambda x:x[0])
+                    if len(k_nearest) > k:
+                        k_nearest.pop()
+            possibles = [e[2] for e in k_nearest]
+            prediction.append(max(possibles, key=possibles.count))
+        return prediction
 
 
 def load_from_file(filename):
@@ -37,20 +57,25 @@ def load_from_file(filename):
 
 def parse_args():
     collected_data = classifier = data_split = k_folds = None
-    algorithm_matcher = { 'kNN': KNearestNeighbors, 'HC': HardCoded }
+    algorithm_matcher = { 'kNN': make_k_nearest, 'HC': HardCoded }
     for arg in sys.argv[1:]:
-        if arg.startswith('-A'):
-            classifier = algorithm_matcher[arg[2:]]
-        elif arg.startswith('-S'):
-            data_split = float(arg[2:])
-        elif arg.startswith('-D'):
-            dataset_name = arg[2:]
+        if arg.startswith('-A='):
+            algorithm = arg[3:]
+            if ':' in algorithm:
+                name, value = algorithm.split(':')
+                classifier = algorithm_matcher[name](int(value or 3))
+            else:
+                classifier = algorithm_matcher[algorithm]
+        elif arg.startswith('-S='):
+            data_split = float(arg[3:] or .7)
+        elif arg.startswith('-D='):
+            dataset_name = arg[3:]
             if dataset_name == 'iris':
                 collected_data = datasets.load_iris()
-            elif dataset_name.startswith('file='):
+            elif dataset_name.startswith('file:'):
                 collected_data = load_from_file(dataset_name[5:])
-        elif arg.startswith('-C'):
-            k_folds = int(arg[2:])
+        elif arg.startswith('-C='):
+            k_folds = int(arg[3:] or 0)
 
     if collected_data is None: collected_data = datasets.load_iris()
     if classifier is None: classifier = HardCoded
