@@ -39,7 +39,13 @@ class KNearestNeighbors:
 
     def d_rank(self, item, t_item, t_answer, nominal):
         if nominal:
-            rank = len(item) - np.sum(item == t_item)
+            rank = 20
+            rank -= 3 if item[0] == t_item[0] else 0
+            rank -= 4 if item[1] == t_item[1] else 0
+            rank -= 1 if item[2] == t_item[2] else 0
+            rank -= 1 if item[3] == t_item[3] else 0
+            rank -= 2 if item[4] == t_item[4] else 0
+            rank -= 5 if item[5] == t_item[5] else 0
         else:
             rank = ((item - t_item)**2).sum()
         return rank, t_item, t_answer
