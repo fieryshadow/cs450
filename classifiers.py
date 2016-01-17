@@ -25,19 +25,15 @@ class KNearestNeighbors:
         self.targets = list(zip(data, answers))
 
     def predict(self, data):
-        k = self.k
         prediction = []
         t_data = self.targets
         for item in data:
-            k_nearest = []
+            neighbors = []
             for t_item, t_answer in t_data:
                 rank = ((item - t_item)**2).sum()
-                if len(k_nearest) < k or rank < k_nearest[-1][0]:
-                    k_nearest.append((rank, t_item, t_answer))
-                    k_nearest = sorted(k_nearest, key=lambda x:x[0])
-                    if len(k_nearest) > k:
-                        k_nearest.pop()
-            possibles = [e[2] for e in k_nearest]
+                neighbors.append((rank, t_item, t_answer))
+            nearest = sorted(neighbors, key=lambda x:x[0])
+            possibles = [e[2] for e in nearest[:self.k]]
             prediction.append(max(possibles, key=possibles.count))
         return prediction
 
