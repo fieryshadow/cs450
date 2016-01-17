@@ -1,6 +1,7 @@
 import sys
 import random
 import numpy as np
+import pandas as pd
 from sklearn import datasets, metrics
 from sklearn.neighbors import KNeighborsClassifier
 
@@ -12,7 +13,7 @@ class HardCoded:
     def train(self, data, answers):
         self.targets = answers
 
-    def predict(self, data):
+    def predict(self, data, nominal=False):
         return [self.targets[0] for i in data]
 
 class KNearestNeighbors:
@@ -24,30 +25,28 @@ class KNearestNeighbors:
     def train(self, data, answers):
         self.targets = list(zip(data, answers))
 
-    def predict(self, data):
+    def predict(self, data, nominal=False):
         prediction = []
         t_data = self.targets
         for item in data:
             neighbors = []
             for t_item, t_answer in t_data:
-                rank = ((item - t_item)**2).sum()
-                neighbors.append((rank, t_item, t_answer))
+                neighbors.append(self.d_rank(item, t_item, t_answer, nominal))
             nearest = sorted(neighbors, key=lambda x:x[0])
             possibles = [e[2] for e in nearest[:self.k]]
             prediction.append(max(possibles, key=possibles.count))
         return prediction
 
+    def d_rank(self, item, t_item, t_answer, nominal):
+        if nominal:
+            rank = len(item) - np.sum(item == t_item)
+        else:
+            rank = ((item - t_item)**2).sum()
+        return rank, t_item, t_answer
 
-def load_from_file(filename):
-    class DataHolder:
-        def __init__(self, data, target, target_names):
-            self.data = data
-            self.target = target
-            self.target_names = target_names
-
-    return DataHolder([], [], []) # placeholder
 
 def parse_args():
+    nominal = False
     collected_data = classifier = data_split = k_folds = None
     algorithm_matcher = { 'kNN': KNearestNeighbors, 'HC': HardCoded }
     for arg in sys.argv[1:]:
@@ -66,17 +65,31 @@ def parse_args():
             dataset_name = arg[3:]
             if dataset_name == 'iris':
                 collected_data = datasets.load_iris()
-            elif dataset_name.startswith('file:'):
-                collected_data = load_from_file(dataset_name[5:])
+            elif dataset_name.startswith('car:'):
+                dataset = np.array(pd.io.parsers.read_csv(
+                        dataset_name[4:], header=None))
+                data = dataset[:,:-1]
+                target = dataset[:,-1]
+                names = ['buying', 'maint', 'doors',
+                        'persons', 'lug_boot', 'safety']
+
+                vals = ['low', 'med', 'high', 'vhigh', '2', '3',
+                        '4', '5more', 'more', 'small', 'big']
+                conv = dict(zip(vals, range(len(vals))))
+                data = np.array([[conv[e] for e in row] for row in data])
+
+                collected_data = type('CarData', (object,), {
+                    'data': data, 'target': target, 'target_names': names })
+                nominal = True
         elif arg.startswith('-C='):
             k_folds = int(arg[3:] or 0)
 
     if collected_data is None: collected_data = datasets.load_iris()
     if classifier is None: classifier = HardCoded()
     if data_split is None: data_split = .7
-    return collected_data, classifier, data_split, k_folds, clf2
+    return collected_data, classifier, data_split, k_folds, nominal, clf2
 
-def cross_val_score(classifier, data, target, folds, clf2):
+def cross_val_score(classifier, data, target, folds, nominal, clf2):
     k = max(0, min(folds, len(data)))
     step = len(data) // k
     results = np.zeros(k)
@@ -88,7 +101,7 @@ def cross_val_score(classifier, data, target, folds, clf2):
         test_key = target[i:i+step]
 
         classifier.train(train_set, train_key)
-        prediction = classifier.predict(test_set)
+        prediction = classifier.predict(test_set, nominal)
         results[pos] = metrics.accuracy_score(test_key, prediction)
 
         clf2.fit(train_set, train_key)
@@ -100,7 +113,7 @@ def cross_val_score(classifier, data, target, folds, clf2):
     print('othr', np.array(prediction_real))
     return results, results_real
 
-def train_test_score(classifier, data, target, split_ratio, clf2):
+def train_test_score(classifier, data, target, split_ratio, nominal, clf2):
     split_point  = round(split_ratio * len(data))
     train_set =   data[:split_point]
     train_key = target[:split_point]
@@ -108,7 +121,7 @@ def train_test_score(classifier, data, target, split_ratio, clf2):
     test_key  = target[split_point:]
 
     classifier.train(train_set, train_key)
-    prediction = classifier.predict(test_set)
+    prediction = classifier.predict(test_set, nominal)
 
     clf2.fit(train_set, train_key)
     prediction_real = clf2.predict(test_set)
@@ -120,7 +133,7 @@ def train_test_score(classifier, data, target, split_ratio, clf2):
             metrics.accuracy_score(test_key, prediction_real))
 
 def main():
-    collected_data, classifier, data_split, k_folds, clf2 = parse_args()
+    collected_data, classifier, data_split, k_folds, nominal, clf2 = parse_args()
     randomized_data = list(zip(collected_data.data, collected_data.target))
     random.shuffle(randomized_data)
     data, target = zip(*randomized_data)
@@ -128,12 +141,12 @@ def main():
     print() # separate displayed data from cmd prompt
     if k_folds and k_folds > 1:
         scores, scores_real = cross_val_score(
-                classifier, data, target, k_folds, clf2)
+                classifier, data, target, k_folds, nominal, clf2)
         accuracy = scores.mean()
         accuracy_real = scores_real.mean()
     else:
         accuracy, accuracy_real = train_test_score(
-                classifier, data, target, data_split, clf2)
+                classifier, data, target, data_split, nominal, clf2)
 
     percentage = int(round(100 * accuracy))
     percentage_real = int(round(100 * accuracy_real))
