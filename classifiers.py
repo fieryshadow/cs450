@@ -6,7 +6,7 @@ from sklearn import datasets, metrics
 from sklearn.neighbors import KNeighborsClassifier
 
 class HardCoded:
-    """A hard coded, same answer always algorithm"""
+    '''A hard coded, same answer always algorithm.'''
     def __init__(self):
         self.targets = []
 
@@ -17,7 +17,7 @@ class HardCoded:
         return [self.targets[0] for i in data]
 
 class KNearestNeighbors:
-    """The k-Nearest Neighbors algorithm"""
+    '''The k-Nearest Neighbors algorithm.'''
     def __init__(self, k):
         self.k = k
         self.targets = []
@@ -150,7 +150,7 @@ def main():
 
     percentage = int(round(100 * accuracy))
     percentage_real = int(round(100 * accuracy_real))
-    print((2*"\nThe {} classifier was {}% accurate.").format(
+    print((2*'\nThe {} classifier was {}% accurate.').format(
         classifier.__class__.__name__, percentage,
         clf2.__class__.__name__, percentage_real))
 
