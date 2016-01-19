@@ -127,11 +127,28 @@ def parse_args():
     if data_split is None: data_split = .7
     return collected, classifier, data_split, k_folds, relation, clf2
 
+def make_confusion_matrix(actual, prediction):
+    labels = np.unique(actual)
+    conv = dict(zip(labels, range(len(labels))))
+    matrix = np.zeros((len(labels), len(labels)))
+    for real, guess in zip(actual, prediction):
+        matrix[conv[real]][conv[guess]] += 1
+    return type('ConfusionMatrix', (object,),
+            { 'values': matrix, 'labels': labels })
+
+def flatten_confusion_matrices(matrices):
+    new_matrix = matrices[0]
+    means = np.array([cm.values for cm in matrices]).mean(0)
+    new_matrix.values = means
+    return new_matrix
+
 def cross_val_score(classifier, data, target, folds, relation, clf2):
     k = max(0, min(folds, len(data)))
     step = len(data) // k
     results = np.zeros(k)
     results_real = np.zeros(k)
+    confusion_matrices = []
+    confusion_matrices_real = []
     for i, pos in zip(range(0, len(data), step), range(k)):
         train_set = data[:i] + data[i+step:]
         test_set = data[i:i+step]
@@ -146,10 +163,13 @@ def cross_val_score(classifier, data, target, folds, relation, clf2):
         prediction_real = clf2.predict(test_set)
         results_real[pos] = metrics.accuracy_score(test_key, prediction_real)
 
-    print('real', np.array(test_key))
-    print('mypr', np.array(prediction))
-    print('othr', np.array(prediction_real))
-    return results, results_real
+        confusion_matrices.append(make_confusion_matrix(test_key, prediction))
+        confusion_matrices_real.append(
+                make_confusion_matrix(test_key, prediction_real))
+
+    confusion_matrix = flatten_confusion_matrices(confusion_matrices)
+    confusion_matrix_real = flatten_confusion_matrices(confusion_matrices_real)
+    return results, results_real, confusion_matrix, confusion_matrix_real
 
 def train_test_score(classifier, data, target, split_ratio, relation, clf2):
     split_point = round(split_ratio * len(data))
@@ -164,11 +184,11 @@ def train_test_score(classifier, data, target, split_ratio, relation, clf2):
     clf2.fit(train_set, train_key)
     prediction_real = clf2.predict(test_set)
 
-    print('real', np.array(test_key))
-    print('mypr', np.array(prediction))
-    print('othr', np.array(prediction_real))
-    return (metrics.accuracy_score(test_key, prediction),
-            metrics.accuracy_score(test_key, prediction_real))
+    accuracy = metrics.accuracy_score(test_key, prediction)
+    accuracy_real = metrics.accuracy_score(test_key, prediction_real)
+    confusion_matrix = make_confusion_matrix(test_key, prediction)
+    confusion_matrix_real = make_confusion_matrix(test_key, prediction_real)
+    return accuracy, accuracy_real, confusion_matrix, confusion_matrix_real
 
 def main():
     print('Loading data...')
@@ -178,21 +198,24 @@ def main():
     random.shuffle(randomized_data)
     data, target = zip(*randomized_data)
 
-    print('Processing data...\n')
+    print('Processing data...')
     if k_folds and k_folds > 1:
-        scores, scores_real = cross_val_score(
+        scores, scores_real, c_matrix, c_matrix_real = cross_val_score(
                 classifier, data, target, k_folds, relation, clf2)
         accuracy = scores.mean()
         accuracy_real = scores_real.mean()
     else:
-        accuracy, accuracy_real = train_test_score(
+        accuracy, accuracy_real, c_matrix, c_matrix_real = train_test_score(
                 classifier, data, target, data_split, relation, clf2)
 
     percentage = int(round(100 * accuracy))
     percentage_real = int(round(100 * accuracy_real))
-    print((2*'\nThe {} classifier was {}% accurate.').format(
-        classifier.__class__.__name__, percentage,
-        clf2.__class__.__name__, percentage_real))
+    print((2*('\nThe {} classifier was {}% accurate,'
+        ' with confusion matrix:\n{}\n') +
+        '\nConfusion matrix class order:\n{}').format(
+        classifier.__class__.__name__, percentage, c_matrix.values,
+        clf2.__class__.__name__, percentage_real, c_matrix_real.values,
+        c_matrix.labels))
 
 if __name__ == '__main__':
     main()
