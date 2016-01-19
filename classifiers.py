@@ -87,23 +87,36 @@ def parse_args():
             if dataset_name == 'iris':
                 collected = datasets.load_iris()
                 relation = LINEAR
-            elif dataset_name.startswith('car:'):
-                dataset = np.array(pd.io.parsers.read_csv(
-                        dataset_name[4:], header=None))
-                data = dataset[:,:-1]
-                target = dataset[:,-1]
-                names = ['buying', 'maint', 'doors',
-                        'persons', 'lug_boot', 'safety']
-                conv = [{ 'low': 0, 'med': 1, 'high': 2, 'vhigh': 3 },
-                        { 'low': 0, 'med': 1, 'high': 2, 'vhigh': 3 },
-                        { '2': 0, '3': 1, '4': 2, '5more': 3 },
-                        { '2': 0, '4': 1, 'more': 2 },
-                        { 'small': 0, 'med': 1, 'big': 2 },
-                        { 'low': 0, 'med': 1, 'high': 2 }]
-                data = np.array([[conv[i][e] for i, e in enumerate(row)]
-                    for row in data])
-                collected = type('CarData', (object,), {
-                    'data': data, 'target': target, 'target_names': names })
+            else:
+                name, loc = dataset_name.split(':', 1)
+                dataset = np.array(pd.io.parsers.read_csv(loc, header=None))
+                if name == 'car':
+                    data = dataset[:,:-1]
+                    target = dataset[:,-1]
+                    attrbutes = ['buying', 'maint', 'doors',
+                            'persons', 'lug_boot', 'safety']
+                    conv = [{ 'low': 0, 'med': 1, 'high': 2, 'vhigh': 3 },
+                            { 'low': 0, 'med': 1, 'high': 2, 'vhigh': 3 },
+                            { '2': 0, '3': 1, '4': 2, '5more': 3 },
+                            { '2': 0, '4': 1, 'more': 2 },
+                            { 'small': 0, 'med': 1, 'big': 2 },
+                            { 'low': 0, 'med': 1, 'high': 2 }]
+                    data = np.array([[conv[i][e] for i, e in enumerate(row)]
+                        for row in data])
+                    target_names = ['unacc', 'acc', 'good', 'vgood']
+                elif name == 'wine':
+                    data = dataset[:,1:]
+                    target = dataset[:,0]
+                    attrbutes = ['Alcohol', 'Malic acid', 'Ash',
+                            'Alcalinity of ash', 'Magnesium', 'Total phenols',
+                            'Flavanoids', 'Nonflavanoid phenols',
+                            'Proanthocyanins', 'Color intensity', 'Hue',
+                            'OD280/OD315 of diluted wines', 'Proline']
+                    target_names = [1, 2, 3]
+                else: continue
+                collected = type(name+'Data', (object,), {
+                    'data': data, 'target': target,
+                    'target_names': target_names, 'attr_names': attrbutes })
                 relation = LINEAR
         elif arg.startswith('-C='):
             k_folds = int(arg[3:] or 0)
