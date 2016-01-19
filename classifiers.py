@@ -2,7 +2,7 @@ import sys
 import random
 import numpy as np
 import pandas as pd
-from sklearn import datasets, metrics
+from sklearn import datasets, metrics, preprocessing as prep
 from sklearn.neighbors import KNeighborsClassifier
 
 NO_RELATION = 0
@@ -13,23 +13,34 @@ class HardCoded:
     def __init__(self):
         self.targets = []
 
-    def train(self, data, answers):
+    def train(self, data, answers, relation=NO_RELATION):
         self.targets = answers
 
-    def predict(self, data, relation=NO_RELATION):
+    def predict(self, data):
         return [self.targets[0] for i in data]
 
 class KNearestNeighbors:
     '''The k-Nearest Neighbors algorithm.'''
-    def __init__(self, k):
+    def __init__(self, k, normalize=True):
         self.k = k
         self.targets = []
+        self.relation = NO_RELATION
+        self.normalize = normalize
+        self.normalizer = type(
+                'notransform', (object,), { 'transform': lambda x:x })
 
-    def train(self, data, answers):
+    def train(self, data, answers, relation=NO_RELATION):
+        self.relation = relation
+        data = np.array(data)
+        if self.normalize and relation == LINEAR:
+            self.normalizer = prep.MinMaxScaler().fit(data.astype(float))
+            data = self.normalizer.transform(data)
         self.targets = list(zip(data, answers))
 
-    def predict(self, data, relation=NO_RELATION):
-        d_rank = self.linear_rank if relation == LINEAR else self.nominal_rank
+    def predict(self, data):
+        d_rank = self.rank_l if self.relation == LINEAR else self.rank_n
+        if self.normalize and self.relation == LINEAR:
+            data = self.normalizer.transform(data)
         prediction = []
         t_data = self.targets
         for item in data:
@@ -41,25 +52,30 @@ class KNearestNeighbors:
             prediction.append(max(possibles, key=possibles.count))
         return prediction
 
-    def linear_rank(self, item, t_item, t_answer):
+    def rank_l(self, item, t_item, t_answer):
         dist = ((item - t_item)**2).sum()
         return dist, t_item, t_answer
 
-    def nominal_rank(self, item, t_item, t_answer):
+    def rank_n(self, item, t_item, t_answer):
         rank = len(item) - (item == t_item).sum()
         return rank, t_item, t_answer
 
 
 def parse_args():
     relation = NO_RELATION
-    collected_data = classifier = data_split = k_folds = None
+    collected = classifier = data_split = k_folds = normalize = None
     algorithm_matcher = { 'kNN': KNearestNeighbors, 'HC': HardCoded }
-    for arg in sys.argv[1:]:
+    args = sys.argv[1:]
+    for arg in args:
+        if arg.startswith('-N='):
+            normalize = True if arg[3:] == 'true' else False
+    if normalize is None: normalize = False
+    for arg in args:
         if arg.startswith('-A='):
             algorithm = arg[3:]
             if ':' in algorithm:
                 name, value = algorithm.split(':')
-                classifier = algorithm_matcher[name](int(value or 3))
+                classifier = algorithm_matcher[name](int(value or 3), normalize)
                 clf2 = KNeighborsClassifier(n_neighbors=classifier.k)
             else:
                 classifier = algorithm_matcher[algorithm]()
@@ -69,7 +85,7 @@ def parse_args():
         elif arg.startswith('-D='):
             dataset_name = arg[3:]
             if dataset_name == 'iris':
-                collected_data = datasets.load_iris()
+                collected = datasets.load_iris()
                 relation = LINEAR
             elif dataset_name.startswith('car:'):
                 dataset = np.array(pd.io.parsers.read_csv(
@@ -86,16 +102,16 @@ def parse_args():
                         { 'low': 0, 'med': 1, 'high': 2 }]
                 data = np.array([[conv[i][e] for i, e in enumerate(row)]
                     for row in data])
-                collected_data = type('CarData', (object,), {
+                collected = type('CarData', (object,), {
                     'data': data, 'target': target, 'target_names': names })
                 relation = LINEAR
         elif arg.startswith('-C='):
             k_folds = int(arg[3:] or 0)
 
-    if collected_data is None: collected_data = datasets.load_iris()
+    if collected is None: collected = datasets.load_iris()
     if classifier is None: classifier = HardCoded()
     if data_split is None: data_split = .7
-    return collected_data, classifier, data_split, k_folds, relation, clf2
+    return collected, classifier, data_split, k_folds, relation, clf2
 
 def cross_val_score(classifier, data, target, folds, relation, clf2):
     k = max(0, min(folds, len(data)))
@@ -108,8 +124,8 @@ def cross_val_score(classifier, data, target, folds, relation, clf2):
         train_key = target[:i] + target[i+step:]
         test_key = target[i:i+step]
 
-        classifier.train(train_set, train_key)
-        prediction = classifier.predict(test_set, relation)
+        classifier.train(train_set, train_key, relation)
+        prediction = classifier.predict(test_set)
         results[pos] = metrics.accuracy_score(test_key, prediction)
 
         clf2.fit(train_set, train_key)
@@ -128,8 +144,8 @@ def train_test_score(classifier, data, target, split_ratio, relation, clf2):
     test_set  =   data[split_point:]
     test_key  = target[split_point:]
 
-    classifier.train(train_set, train_key)
-    prediction = classifier.predict(test_set, relation)
+    classifier.train(train_set, train_key, relation)
+    prediction = classifier.predict(test_set)
 
     clf2.fit(train_set, train_key)
     prediction_real = clf2.predict(test_set)
