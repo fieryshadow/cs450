@@ -1,3 +1,4 @@
+print('Loading code...')
 import sys
 import random
 import numpy as np
@@ -67,11 +68,11 @@ def parse_args():
     algorithm_matcher = { 'kNN': KNearestNeighbors, 'HC': HardCoded }
     args = sys.argv[1:]
     for arg in args:
-        if arg.startswith('-N='):
-            normalize = True if arg[3:] == 'true' else False
+        if arg == '-n': normalize = True
     if normalize is None: normalize = False
+
     for arg in args:
-        if arg.startswith('-A='):
+        if arg.startswith('-a='):
             algorithm = arg[3:]
             if ':' in algorithm:
                 name, value = algorithm.split(':')
@@ -80,9 +81,9 @@ def parse_args():
             else:
                 classifier = algorithm_matcher[algorithm]()
                 clf2 = KNeighborsClassifier(n_neighbors=3)
-        elif arg.startswith('-S='):
+        elif arg.startswith('-s='):
             data_split = float(arg[3:] or .7)
-        elif arg.startswith('-D='):
+        elif arg.startswith('-d='):
             dataset_name = arg[3:]
             if dataset_name == 'iris':
                 collected = datasets.load_iris()
@@ -118,7 +119,7 @@ def parse_args():
                     'data': data, 'target': target,
                     'target_names': target_names, 'attr_names': attrbutes })
                 relation = LINEAR
-        elif arg.startswith('-C='):
+        elif arg.startswith('-c='):
             k_folds = int(arg[3:] or 0)
 
     if collected is None: collected = datasets.load_iris()
@@ -151,7 +152,7 @@ def cross_val_score(classifier, data, target, folds, relation, clf2):
     return results, results_real
 
 def train_test_score(classifier, data, target, split_ratio, relation, clf2):
-    split_point  = round(split_ratio * len(data))
+    split_point = round(split_ratio * len(data))
     train_set =   data[:split_point]
     train_key = target[:split_point]
     test_set  =   data[split_point:]
@@ -170,13 +171,14 @@ def train_test_score(classifier, data, target, split_ratio, relation, clf2):
             metrics.accuracy_score(test_key, prediction_real))
 
 def main():
+    print('Loading data...')
     (collected_data, classifier, data_split,
             k_folds, relation, clf2) = parse_args()
     randomized_data = list(zip(collected_data.data, collected_data.target))
     random.shuffle(randomized_data)
     data, target = zip(*randomized_data)
 
-    print() # separate displayed data from cmd prompt
+    print('Processing data...\n')
     if k_folds and k_folds > 1:
         scores, scores_real = cross_val_score(
                 classifier, data, target, k_folds, relation, clf2)
