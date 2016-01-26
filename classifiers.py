@@ -6,6 +6,9 @@ import pandas as pd
 from sklearn import datasets, metrics, preprocessing as prep
 from sklearn.neighbors import KNeighborsClassifier
 
+CMF_ACTUAL = 'cmf_actual'
+CMF_ZERO_ONE = 'cmf_zero_one'
+CMF_NO_FORCE = 'cmf_no_force'
 NO_RELATION = 0
 LINEAR = 1
 
@@ -60,6 +63,29 @@ class KNearestNeighbors:
     def rank_n(self, item, t_item, t_answer):
         rank = len(item) - (item == t_item).sum()
         return rank, t_item, t_answer
+
+class MLSeed():
+    def __init__(self):
+        self.cross_folds = 0
+        self.classifier = HardCoded()
+        self.relation = NO_RELATION
+        self.normalize_data = False
+        self.split_ratio = .7
+        self.randomize_data = False
+        self.randomize_splits = False
+        self.confusion_matrix_format = CMF_NO_FORCE
+        self.normalize_confusion_matrix = False
+        self.show_confusion_matrix = True
+        self.show_loss_matrix = False
+        self.show_accuracy = True
+        self.show_sensitivity = False
+        self.show_specificity = False
+        self.show_precision = False
+        self.show_recall = False
+        self.show_f_measure = False
+        self.dataset = IRIS
+        self.target_pos = 0
+        self.compare_classifier = None
 
 
 def parse_args():
