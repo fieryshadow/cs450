@@ -6,6 +6,9 @@ import pandas as pd
 from sklearn import datasets, metrics, preprocessing as prep
 from sklearn.neighbors import KNeighborsClassifier
 
+CAR = 'car'
+IRIS = 'iris'
+WINE = 'wine'
 CMF_ACTUAL = 'cmf_actual'
 CMF_ZERO_ONE = 'cmf_zero_one'
 CMF_NO_FORCE = 'cmf_no_force'
@@ -71,7 +74,7 @@ class MLSeed():
         self.relation = NO_RELATION
         self.normalize_data = False
         self.split_ratio = .7
-        self.randomize_data = False
+        self.randomize_data = True
         self.randomize_splits = False
         self.confusion_matrix_format = CMF_NO_FORCE
         self.normalize_confusion_matrix = False
@@ -88,9 +91,64 @@ class MLSeed():
         self.compare_classifier = None
 
 
+def make_sane_data(ml_seed):
+    if ml_seed.dataset == IRIS:
+        raw = datasets.load_iris()
+        data = raw.data
+        target = raw.target
+        target_names = raw.target_names
+        features = ['sepal length', 'sepal width', 'pedal length', 'pedal width']
+        name = 'iris'
+    else:
+        name = ml_seed.dataset
+        if name == CAR:
+            ml_seed.dataset = 'http://archive.ics.uci.edu/ml/'\
+                    'machine-learning-databases/car/car.data'
+        elif name == WINE:
+            ml_seed.dataset = 'http://archive.ics.uci.edu/ml/'\
+                    'machine-learning-databases/wine/wine.data'
+        else: name = 'loaded'
+        raw = np.array(pd.io.parsers.read_csv(ml_seed.dataset, header=None))
+        pos = ml_seed.target_pos
+        data = np.hstack((raw[:,:pos], raw[:,pos+1:]))
+        target = raw[:,pos]
+        target_names = sorted(np.unique(target))
+
+        if name == CAR:
+            features = ['buying', 'maint', 'doors',
+                    'persons', 'lug_boot', 'safety']
+            conv = [{ 'low': 0, 'med': 1, 'high': 2, 'vhigh': 3 },
+                    { 'low': 0, 'med': 1, 'high': 2, 'vhigh': 3 },
+                    { '2': 0, '3': 1, '4': 2, '5more': 3 },
+                    { '2': 0, '4': 1, 'more': 2 },
+                    { 'small': 0, 'med': 1, 'big': 2 },
+                    { 'low': 0, 'med': 1, 'high': 2 }]
+            data = np.array([[conv[i][e] for i, e in enumerate(row)]
+                for row in data])
+            target_names = ['unacc', 'acc', 'good', 'vgood']
+        elif name == WINE:
+            features = ['Alcohol', 'Malic acid', 'Ash',
+                    'Alcalinity of ash', 'Magnesium', 'Total phenols',
+                    'Flavanoids', 'Nonflavanoid phenols',
+                    'Proanthocyanins', 'Color intensity', 'Hue',
+                    'OD280/OD315 of diluted wines', 'Proline']
+            target_names = [1, 2, 3]
+        else:
+            features = ['feature{}'.format(i) for i in range(1, len(data[0])+1)]
+
+    if ml_seed.randomize_data:
+        randomized = list(zip(data, target))
+        random.shuffle(randomized)
+        data, target = zip(*randomized)
+
+    return type(name+'Data', (object,), {
+        'data': np.array(data), 'target': np.array(target),
+        'target_names': target_names, 'features': features })
+
 def parse_args():
+    ml_seed = MLSeed()
     relation = NO_RELATION
-    collected = classifier = data_split = k_folds = normalize = None
+    classifier = data_split = k_folds = normalize = None
     algorithm_matcher = { 'kNN': KNearestNeighbors, 'HC': HardCoded }
     args = sys.argv[1:]
     for arg in args:
@@ -110,51 +168,18 @@ def parse_args():
         elif arg.startswith('-s='):
             data_split = float(arg[3:] or .7)
         elif arg.startswith('-d='):
-            dataset_name = arg[3:]
-            if dataset_name == 'iris':
-                collected = datasets.load_iris()
-                relation = LINEAR
-            else:
-                name, loc = dataset_name.split(':', 1)
-                dataset = np.array(pd.io.parsers.read_csv(loc, header=None))
-                if name == 'car':
-                    data = dataset[:,:-1]
-                    target = dataset[:,-1]
-                    attrbutes = ['buying', 'maint', 'doors',
-                            'persons', 'lug_boot', 'safety']
-                    conv = [{ 'low': 0, 'med': 1, 'high': 2, 'vhigh': 3 },
-                            { 'low': 0, 'med': 1, 'high': 2, 'vhigh': 3 },
-                            { '2': 0, '3': 1, '4': 2, '5more': 3 },
-                            { '2': 0, '4': 1, 'more': 2 },
-                            { 'small': 0, 'med': 1, 'big': 2 },
-                            { 'low': 0, 'med': 1, 'high': 2 }]
-                    data = np.array([[conv[i][e] for i, e in enumerate(row)]
-                        for row in data])
-                    target_names = ['unacc', 'acc', 'good', 'vgood']
-                elif name == 'wine':
-                    data = dataset[:,1:]
-                    target = dataset[:,0]
-                    attrbutes = ['Alcohol', 'Malic acid', 'Ash',
-                            'Alcalinity of ash', 'Magnesium', 'Total phenols',
-                            'Flavanoids', 'Nonflavanoid phenols',
-                            'Proanthocyanins', 'Color intensity', 'Hue',
-                            'OD280/OD315 of diluted wines', 'Proline']
-                    target_names = [1, 2, 3]
-                else: continue
-                collected = type(name+'Data', (object,), {
-                    'data': data, 'target': target,
-                    'target_names': target_names, 'attr_names': attrbutes })
-                relation = LINEAR
+            ml_seed.dataset = arg[3:]
+            relation = LINEAR
         elif arg.startswith('-c='):
             k_folds = int(arg[3:] or 0)
+        elif arg.startswith('-t='):
+            ml_seed.target_pos = int(arg[3:] or 0)
 
-    if collected is None: collected = datasets.load_iris()
     if classifier is None: classifier = HardCoded()
     if data_split is None: data_split = .7
-    return collected, classifier, data_split, k_folds, relation, clf2
+    return classifier, data_split, k_folds, relation, clf2, ml_seed
 
-def make_confusion_matrix(actual, prediction):
-    labels = np.unique(actual)
+def make_confusion_matrix(labels, actual, prediction):
     conv = dict(zip(labels, range(len(labels))))
     matrix = np.zeros((len(labels), len(labels)))
     for real, guess in zip(actual, prediction):
@@ -175,10 +200,11 @@ def cross_val_score(classifier, data, target, folds, relation, clf2):
     results_real = np.zeros(k)
     confusion_matrices = []
     confusion_matrices_real = []
+    labels = np.unique(target)
     for i, pos in zip(range(0, len(data), step), range(k)):
-        train_set = data[:i] + data[i+step:]
+        train_set = np.vstack((data[:i], data[i+step:]))
+        train_key = np.hstack((target[:i], target[i+step:]))
         test_set = data[i:i+step]
-        train_key = target[:i] + target[i+step:]
         test_key = target[i:i+step]
 
         classifier.train(train_set, train_key, relation)
@@ -189,9 +215,10 @@ def cross_val_score(classifier, data, target, folds, relation, clf2):
         prediction_real = clf2.predict(test_set)
         results_real[pos] = metrics.accuracy_score(test_key, prediction_real)
 
-        confusion_matrices.append(make_confusion_matrix(test_key, prediction))
+        confusion_matrices.append(
+                make_confusion_matrix(labels, test_key, prediction))
         confusion_matrices_real.append(
-                make_confusion_matrix(test_key, prediction_real))
+                make_confusion_matrix(labels, test_key, prediction_real))
 
     confusion_matrix = flatten_confusion_matrices(confusion_matrices)
     confusion_matrix_real = flatten_confusion_matrices(confusion_matrices_real)
@@ -210,19 +237,19 @@ def train_test_score(classifier, data, target, split_ratio, relation, clf2):
     clf2.fit(train_set, train_key)
     prediction_real = clf2.predict(test_set)
 
+    labels = np.unique(target)
     accuracy = metrics.accuracy_score(test_key, prediction)
     accuracy_real = metrics.accuracy_score(test_key, prediction_real)
-    confusion_matrix = make_confusion_matrix(test_key, prediction)
-    confusion_matrix_real = make_confusion_matrix(test_key, prediction_real)
+    confusion_matrix = make_confusion_matrix(labels, test_key, prediction)
+    confusion_matrix_real = \
+            make_confusion_matrix(labels, test_key, prediction_real)
     return accuracy, accuracy_real, confusion_matrix, confusion_matrix_real
 
 def main():
     print('Loading data...')
-    (collected_data, classifier, data_split,
-            k_folds, relation, clf2) = parse_args()
-    randomized_data = list(zip(collected_data.data, collected_data.target))
-    random.shuffle(randomized_data)
-    data, target = zip(*randomized_data)
+    classifier, data_split, k_folds, relation, clf2, ml_seed = parse_args()
+    dataset = make_sane_data(ml_seed)
+    data, target = dataset.data, dataset.target
 
     print('Processing data...')
     if k_folds and k_folds > 1:
