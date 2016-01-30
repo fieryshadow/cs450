@@ -9,6 +9,9 @@ from sklearn.neighbors import KNeighborsClassifier
 CAR = 'car'
 IRIS = 'iris'
 WINE = 'wine'
+KNNC = 'kNN'
+HCC = 'HC'
+DEFAULT_NEIGHBORS = 3
 CMF_ACTUAL = 'cmf_actual'
 CMF_ZERO_ONE = 'cmf_zero_one'
 CMF_NO_FORCE = 'cmf_no_force'
@@ -72,8 +75,9 @@ class MLSeed():
         self.cross_folds = 0
         self.classifier = HardCoded()
         self.relation = NO_RELATION
-        self.normalize_data = False
-        self.split_ratio = .7
+        self.normalize_my_data = False
+        self.normalize_their_data = False
+        self.split_ratio = .6
         self.randomize_data = True
         self.randomize_splits = False
         self.confusion_matrix_format = CMF_NO_FORCE
@@ -87,11 +91,12 @@ class MLSeed():
         self.show_f_measure = False
         self.dataset = IRIS
         self.target_pos = 0
-        self.compare_classifier = None
+        self.compare_classifier = KNNC
 
 
 def make_sane_data(ml_seed):
     if ml_seed.dataset == IRIS:
+        ml_seed.relation = LINEAR
         raw = datasets.load_iris()
         data = raw.data
         target = raw.target
@@ -103,9 +108,13 @@ def make_sane_data(ml_seed):
         if name == CAR:
             ml_seed.dataset = 'http://archive.ics.uci.edu/ml/'\
                     'machine-learning-databases/car/car.data'
+            ml_seed.relation = LINEAR
+            ml_seed.target_pos = 6
         elif name == WINE:
             ml_seed.dataset = 'http://archive.ics.uci.edu/ml/'\
                     'machine-learning-databases/wine/wine.data'
+            ml_seed.relation = LINEAR
+            ml_seed.target_pos = 0
         else: name = 'loaded'
         raw = np.array(pd.io.parsers.read_csv(ml_seed.dataset, header=None))
         pos = ml_seed.target_pos
@@ -144,43 +153,51 @@ def make_sane_data(ml_seed):
         'data': np.array(data), 'target': np.array(target),
         'target_names': target_names, 'features': features })
 
+def classify_me(ml_seed):
+    if ml_seed.classifier == KNNC:
+        return KNearestNeighbors(
+                ml_seed.number_of_neighbors, ml_seed.normalize_my_data)
+    elif ml_seed.classifier == HCC:
+        return HardCoded(ml_seed.normalize_my_data)
+    return HardCoded()
+
+def classify_them(ml_seed):
+    if ml_seed.compare_classifier == KNNC:
+        return KNeighborsClassifier(n_neighbors=ml_seed.compare_n_neighbors)
+    return None
+
 def parse_args():
     ml_seed = MLSeed()
-    relation = NO_RELATION
-    classifier = data_split = k_folds = normalize = None
-    algorithm_matcher = { 'kNN': KNearestNeighbors, 'HC': HardCoded }
-    args = sys.argv[1:]
-    for arg in args:
-        if arg == '-n': normalize = True
-    if normalize is None: normalize = False
-
-    for arg in args:
+    for arg in sys.argv[1:]:
         if arg.startswith('-a='):
             algorithm = arg[3:]
             if ':' in algorithm:
-                name, value = algorithm.split(':')
-                classifier = algorithm_matcher[name](int(value or 3), normalize)
-                clf2 = KNeighborsClassifier(n_neighbors=classifier.k)
-            else:
-                classifier = algorithm_matcher[algorithm]()
-                clf2 = KNeighborsClassifier(n_neighbors=3)
+                ml_seed.classifier, param = algorithm.split(':')
+                ml_seed.number_of_neighbors = int(param or DEFAULT_NEIGHBORS)
+            else: ml_seed.classifier = algorithm
+        elif arg.startswith('-A='):
+            algorithm = arg[3:]
+            if ':' in algorithm:
+                ml_seed.compare_classifier, param = algorithm.split(':')
+                ml_seed.compare_n_neighbors = int(param or DEFAULT_NEIGHBORS)
+            else: ml_seed.compare_classifier = algorithm
         elif arg.startswith('-s='):
-            data_split = float(arg[3:] or .7)
+            ml_seed.split_ratio = float(arg[3:] or ml_seed.split_ratio)
         elif arg.startswith('-d='):
             ml_seed.dataset = arg[3:]
-            relation = LINEAR
         elif arg.startswith('-c='):
-            k_folds = int(arg[3:] or 0)
+            ml_seed.cross_folds = int(arg[3:] or ml_seed.cross_folds)
+        elif arg.startswith('-n'):
+            ml_seed.normalize_my_data = True
+        elif arg.startswith('-N'):
+            ml_seed.normalize_their_data = True
         elif arg.startswith('-t='):
-            ml_seed.target_pos = int(arg[3:] or 0)
+            ml_seed.target_pos = int(arg[3:] or ml_seed.target_pos)
         elif arg.startswith('-z'):
             ml_seed.confusion_matrix_format = CMF_ZERO_ONE
         elif arg.startswith('-Z'):
             ml_seed.confusion_matrix_format = CMF_ACTUAL
-
-    if classifier is None: classifier = HardCoded()
-    if data_split is None: data_split = .7
-    return classifier, data_split, k_folds, relation, clf2, ml_seed
+    return ml_seed
 
 def make_confusion_matrix(labels, actual, prediction):
     conv = dict(zip(labels, range(len(labels))))
@@ -204,21 +221,20 @@ def convert_to_zero_one(matrix):
             percents[i][j] = round(elem/s, 2)
     return percents
 
-def cross_val_score(classifier, data, target, folds, relation, clf2, ml_seed):
-    k = max(0, min(folds, len(data)))
+def cross_val_score(classifier, data, target, labels, clf2, ml_seed):
+    k = max(0, min(ml_seed.cross_folds, len(data)))
     step = len(data) // k
     results = np.zeros(k)
     results_real = np.zeros(k)
     confusion_matrices = []
     confusion_matrices_real = []
-    labels = np.unique(target)
     for i, pos in zip(range(0, len(data), step), range(k)):
         train_set = np.vstack((data[:i], data[i+step:]))
         train_key = np.hstack((target[:i], target[i+step:]))
         test_set = data[i:i+step]
         test_key = target[i:i+step]
 
-        classifier.train(train_set, train_key, relation)
+        classifier.train(train_set, train_key, ml_seed.relation)
         prediction = classifier.predict(test_set)
         results[pos] = metrics.accuracy_score(test_key, prediction)
 
@@ -239,20 +255,19 @@ def cross_val_score(classifier, data, target, folds, relation, clf2, ml_seed):
                 confusion_matrix_real.values)
     return results, results_real, confusion_matrix, confusion_matrix_real
 
-def train_test_score(classifier, data, target, split_ratio, relation, clf2):
-    split_point = round(split_ratio * len(data))
+def train_test_score(classifier, data, target, labels, clf2, ml_seed):
+    split_point = round(ml_seed.split_ratio * len(data))
     train_set =   data[:split_point]
     train_key = target[:split_point]
     test_set  =   data[split_point:]
     test_key  = target[split_point:]
 
-    classifier.train(train_set, train_key, relation)
+    classifier.train(train_set, train_key, ml_seed.relation)
     prediction = classifier.predict(test_set)
 
     clf2.fit(train_set, train_key)
     prediction_real = clf2.predict(test_set)
 
-    labels = np.unique(target)
     accuracy = metrics.accuracy_score(test_key, prediction)
     accuracy_real = metrics.accuracy_score(test_key, prediction_real)
     confusion_matrix = make_confusion_matrix(labels, test_key, prediction)
@@ -262,19 +277,21 @@ def train_test_score(classifier, data, target, split_ratio, relation, clf2):
 
 def main():
     print('Loading data...')
-    classifier, data_split, k_folds, relation, clf2, ml_seed = parse_args()
+    ml_seed = parse_args()
     dataset = make_sane_data(ml_seed)
-    data, target = dataset.data, dataset.target
+    data, target, labels = dataset.data, dataset.target, dataset.target_names
+    classifier = classify_me(ml_seed)
+    clf2 = classify_them(ml_seed)
 
     print('Processing data...')
-    if k_folds and k_folds > 1:
+    if ml_seed.cross_folds > 1:
         scores, scores_real, c_matrix, c_matrix_real = cross_val_score(
-                classifier, data, target, k_folds, relation, clf2, ml_seed)
+                classifier, data, target, labels, clf2, ml_seed)
         accuracy = scores.mean()
         accuracy_real = scores_real.mean()
     else:
         accuracy, accuracy_real, c_matrix, c_matrix_real = train_test_score(
-                classifier, data, target, data_split, relation, clf2)
+                classifier, data, target, labels, clf2, ml_seed)
 
     percentage = int(round(100 * accuracy))
     percentage_real = int(round(100 * accuracy_real))
