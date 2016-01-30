@@ -77,7 +77,6 @@ class MLSeed():
         self.randomize_data = True
         self.randomize_splits = False
         self.confusion_matrix_format = CMF_NO_FORCE
-        self.normalize_confusion_matrix = False
         self.show_confusion_matrix = True
         self.show_loss_matrix = False
         self.show_accuracy = True
@@ -174,6 +173,10 @@ def parse_args():
             k_folds = int(arg[3:] or 0)
         elif arg.startswith('-t='):
             ml_seed.target_pos = int(arg[3:] or 0)
+        elif arg.startswith('-z'):
+            ml_seed.confusion_matrix_format = CMF_ZERO_ONE
+        elif arg.startswith('-Z'):
+            ml_seed.confusion_matrix_format = CMF_ACTUAL
 
     if classifier is None: classifier = HardCoded()
     if data_split is None: data_split = .7
@@ -193,7 +196,15 @@ def flatten_confusion_matrices(matrices):
     new_matrix.values = means
     return new_matrix
 
-def cross_val_score(classifier, data, target, folds, relation, clf2):
+def convert_to_zero_one(matrix):
+    percents = np.zeros(matrix.shape)
+    s = matrix.sum()
+    for i, row in enumerate(matrix):
+        for j, elem in enumerate(row):
+            percents[i][j] = round(elem/s, 2)
+    return percents
+
+def cross_val_score(classifier, data, target, folds, relation, clf2, ml_seed):
     k = max(0, min(folds, len(data)))
     step = len(data) // k
     results = np.zeros(k)
@@ -222,6 +233,10 @@ def cross_val_score(classifier, data, target, folds, relation, clf2):
 
     confusion_matrix = flatten_confusion_matrices(confusion_matrices)
     confusion_matrix_real = flatten_confusion_matrices(confusion_matrices_real)
+    if ml_seed.confusion_matrix_format != CMF_ACTUAL:
+        confusion_matrix.values = convert_to_zero_one(confusion_matrix.values)
+        confusion_matrix_real.values = convert_to_zero_one(
+                confusion_matrix_real.values)
     return results, results_real, confusion_matrix, confusion_matrix_real
 
 def train_test_score(classifier, data, target, split_ratio, relation, clf2):
@@ -254,7 +269,7 @@ def main():
     print('Processing data...')
     if k_folds and k_folds > 1:
         scores, scores_real, c_matrix, c_matrix_real = cross_val_score(
-                classifier, data, target, k_folds, relation, clf2)
+                classifier, data, target, k_folds, relation, clf2, ml_seed)
         accuracy = scores.mean()
         accuracy_real = scores_real.mean()
     else:
@@ -263,6 +278,12 @@ def main():
 
     percentage = int(round(100 * accuracy))
     percentage_real = int(round(100 * accuracy_real))
+    if ml_seed.confusion_matrix_format == CMF_ZERO_ONE:
+        np.set_printoptions(formatter={'float':lambda x:'{:.2f}'.format(x)[1:]})
+        c_matrix.values = convert_to_zero_one(c_matrix.values)
+        c_matrix_real.values = convert_to_zero_one(c_matrix_real.values)
+    else:
+        np.set_printoptions(formatter={'float':lambda x:'{:>7.2f}'.format(x)})
     print((2*('\nThe {} classifier was {}% accurate,'
         ' with confusion matrix:\n{}\n') +
         '\nConfusion matrix class order:\n{}').format(
