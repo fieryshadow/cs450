@@ -12,6 +12,10 @@ CAR = 'car'
 IRIS = 'iris'
 WINE = 'wine'
 KNNC = 'kNN'
+LENSES = 'lenses'
+VOTING = 'voting'
+CREDIT = 'credit'
+CHESS = 'chess'
 ID3C = 'ID3'
 HCC = 'HC'
 DEFAULT_NEIGHBORS = 3
@@ -166,6 +170,7 @@ def make_sane_data(ml_seed):
         features = ['sepal length', 'sepal width', 'pedal length', 'pedal width']
         name = 'iris'
     else:
+        sep = ','
         name = ml_seed.dataset
         if name == CAR:
             ml_seed.dataset = 'http://archive.ics.uci.edu/ml/'\
@@ -177,8 +182,26 @@ def make_sane_data(ml_seed):
                     'machine-learning-databases/wine/wine.data'
             ml_seed.relation = LINEAR
             ml_seed.target_pos = 0
+        elif name == LENSES:
+            ml_seed.dataset = 'https://archive.ics.uci.edu/ml/'\
+                    'machine-learning-databases/lenses/lenses.data'
+            ml_seed.target_pos = 5
+            sep = '\s+' # whitespace
+        elif name == VOTING:
+            ml_seed.dataset = 'https://archive.ics.uci.edu/ml/machine-'\
+                    'learning-databases/voting-records/house-votes-84.data'
+            ml_seed.target_pos = 0
+        elif name == CREDIT:
+            ml_seed.dataset = 'https://archive.ics.uci.edu/ml/'\
+                    'machine-learning-databases/credit-screening/crx.data'
+            ml_seed.target_pos = 15
+        elif name == CHESS:
+            ml_seed.dataset = 'https://archive.ics.uci.edu/ml/machine-'\
+                    'learning-databases/chess/king-rook-vs-king/krkopt.data'
+            ml_seed.target_pos = 6
         else: name = 'loaded'
-        raw = np.array(pd.io.parsers.read_csv(ml_seed.dataset, header=None))
+        raw = np.array(pd.io.parsers.read_csv(
+            ml_seed.dataset, sep=sep, header=None))
         pos = ml_seed.target_pos
         data = np.hstack((raw[:,:pos], raw[:,pos+1:]))
         if ml_seed.relation != LINEAR:
