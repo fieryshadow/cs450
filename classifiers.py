@@ -165,8 +165,8 @@ def make_sane_data(ml_seed):
         ml_seed.relation = LINEAR
         raw = datasets.load_iris()
         data = raw.data
-        target = raw.target
         target_names = raw.target_names
+        target = [target_names[i] for i in raw.target]
         features = ['sepal length', 'sepal width', 'pedal length', 'pedal width']
         name = 'iris'
     else:
