@@ -155,6 +155,7 @@ class MLSeed():
         self.show_precision = False
         self.show_recall = False
         self.show_f_measure = False
+        self.show_tree = False
         self.dataset = IRIS
         self.target_pos = 0
         self.compare_classifier = KNNC
@@ -285,7 +286,16 @@ def parse_args():
             ml_seed.confusion_matrix_format = CMF_ZERO_ONE
         elif arg.startswith('-Z'):
             ml_seed.confusion_matrix_format = CMF_ACTUAL
+        elif arg.startswith('-Y'):
+            ml_seed.show_tree = True
     return ml_seed
+
+def display_tree(tree, level=0, pre='->'):
+    if isinstance(tree.mapping, dict):
+        print('  '*level + pre + repr(tree.feature) + ':')
+        for feature_value, child in tree.mapping.items():
+            display_tree(child, level+1, repr(feature_value)+'->')
+    else: print('  '*level + pre + repr(tree.mapping))
 
 def make_confusion_matrix(labels, actual, prediction):
     conv = dict(zip(labels, range(len(labels))))
@@ -380,6 +390,10 @@ def main():
     else:
         accuracy, accuracy_real, c_matrix, c_matrix_real = train_test_score(
                 classifier, data, target, labels, clf2, ml_seed)
+
+    if ml_seed.show_tree:
+        print() # give me some space!
+        display_tree(classifier.tree)
 
     percentage = int(round(100 * accuracy))
     percentage_real = int(round(100 * accuracy_real))
