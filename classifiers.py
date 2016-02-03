@@ -3,7 +3,7 @@ import sys
 import random
 import numpy as np
 import pandas as pd
-from sklearn import datasets, metrics, preprocessing as prep
+from sklearn import datasets, metrics, cluster, preprocessing as prep
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.metrics.cluster import entropy as calc_entropy
@@ -159,6 +159,7 @@ class MLSeed():
         self.dataset = IRIS
         self.target_pos = 0
         self.compare_classifier = KNNC
+        self.clusterize = 0
 
 
 def make_sane_data(ml_seed):
@@ -239,6 +240,12 @@ def make_sane_data(ml_seed):
         random.shuffle(randomized)
         data, target = zip(*randomized)
 
+    if ml_seed.clusterize:
+        data = np.array(data)
+        km = cluster.KMeans(n_clusters=ml_seed.clusterize)
+        data = np.vstack(np.transpose([km.fit_predict(
+            data[:,i].reshape(-1, 1)) for i in range(len(data[0]))]))
+
     return type(name+'Data', (object,), {
         'data': np.array(data), 'target': np.array(target),
         'target_names': target_names, 'features': features })
@@ -288,6 +295,8 @@ def parse_args():
             ml_seed.confusion_matrix_format = CMF_ACTUAL
         elif arg.startswith('-Y'):
             ml_seed.show_tree = True
+        elif arg.startswith('-C='):
+            ml_seed.clusterize = int(arg[3:] or ml_seed.clusterize)
     return ml_seed
 
 def display_tree(tree, level=0, pre='->'):
