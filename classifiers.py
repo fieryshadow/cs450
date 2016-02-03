@@ -220,18 +220,21 @@ def make_sane_data(ml_seed):
         'target_names': target_names, 'features': features })
 
 def classify_me(ml_seed):
-    if ml_seed.classifier == KNNC:
-        return KNearestNeighbors(
-                ml_seed.number_of_neighbors, ml_seed.normalize_my_data)
+    if ml_seed.classifier.startswith(KNNC):
+        _, param = ml_seed.classifier.split(':')
+        k = int(param or DEFAULT_NEIGHBORS)
+        return KNearestNeighbors(k, ml_seed.normalize_my_data)
     elif ml_seed.classifier == ID3C:
         return ID3Tree()
     elif ml_seed.classifier == HCC:
-        return HardCoded(ml_seed.normalize_my_data)
+        return HardCoded()
     return HardCoded()
 
 def classify_them(ml_seed):
-    if ml_seed.compare_classifier == KNNC:
-        return KNeighborsClassifier(n_neighbors=ml_seed.compare_n_neighbors)
+    if ml_seed.compare_classifier.startswith(KNNC):
+        _, param = ml_seed.compare_classifier.split(':')
+        k = int(param or DEFAULT_NEIGHBORS)
+        return KNeighborsClassifier(n_neighbors=k)
     elif ml_seed.compare_classifier == ID3C:
         return DecisionTreeClassifier()
     return None
@@ -240,17 +243,9 @@ def parse_args():
     ml_seed = MLSeed()
     for arg in sys.argv[1:]:
         if arg.startswith('-a='):
-            algorithm = arg[3:]
-            if ':' in algorithm:
-                ml_seed.classifier, param = algorithm.split(':')
-                ml_seed.number_of_neighbors = int(param or DEFAULT_NEIGHBORS)
-            else: ml_seed.classifier = algorithm
+            ml_seed.classifier = arg[3:]
         elif arg.startswith('-A='):
-            algorithm = arg[3:]
-            if ':' in algorithm:
-                ml_seed.compare_classifier, param = algorithm.split(':')
-                ml_seed.compare_n_neighbors = int(param or DEFAULT_NEIGHBORS)
-            else: ml_seed.compare_classifier = algorithm
+            ml_seed.compare_classifier = arg[3:]
         elif arg.startswith('-s='):
             ml_seed.split_ratio = float(arg[3:] or ml_seed.split_ratio)
         elif arg.startswith('-d='):
