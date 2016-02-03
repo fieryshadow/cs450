@@ -119,6 +119,10 @@ def make_sane_data(ml_seed):
         raw = np.array(pd.io.parsers.read_csv(ml_seed.dataset, header=None))
         pos = ml_seed.target_pos
         data = np.hstack((raw[:,:pos], raw[:,pos+1:]))
+        if ml_seed.relation != LINEAR:
+            le = prep.LabelEncoder()
+            data = np.vstack(np.transpose(
+                [le.fit_transform(data[:,i]) for i in range(len(data[0]))]))
         target = raw[:,pos]
         target_names = sorted(np.unique(target))
 
