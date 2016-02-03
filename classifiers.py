@@ -5,6 +5,7 @@ import numpy as np
 import pandas as pd
 from sklearn import datasets, metrics, preprocessing as prep
 from sklearn.neighbors import KNeighborsClassifier
+from sklearn.tree import DecisionTreeClassifier
 from sklearn.metrics.cluster import entropy as calc_entropy
 
 CAR = 'car'
@@ -231,6 +232,8 @@ def classify_me(ml_seed):
 def classify_them(ml_seed):
     if ml_seed.compare_classifier == KNNC:
         return KNeighborsClassifier(n_neighbors=ml_seed.compare_n_neighbors)
+    elif ml_seed.compare_classifier == ID3C:
+        return DecisionTreeClassifier()
     return None
 
 def parse_args():
