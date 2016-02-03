@@ -5,11 +5,13 @@ import numpy as np
 import pandas as pd
 from sklearn import datasets, metrics, preprocessing as prep
 from sklearn.neighbors import KNeighborsClassifier
+from sklearn.metrics.cluster import entropy as calc_entropy
 
 CAR = 'car'
 IRIS = 'iris'
 WINE = 'wine'
 KNNC = 'kNN'
+ID3C = 'ID3'
 HCC = 'HC'
 DEFAULT_NEIGHBORS = 3
 CMF_ACTUAL = 'cmf_actual'
@@ -69,6 +71,65 @@ class KNearestNeighbors:
     def rank_n(self, item, t_item, t_answer):
         rank = len(item) - (item == t_item).sum()
         return rank, t_item, t_answer
+
+class ID3Node():
+    def __init__(self):
+        self.default = None
+        self.feature = None
+        self.mapping = {}
+
+class ID3Tree():
+    def __init__(self):
+        self.tree = ID3Node()
+
+    def train(self, data, answers, relation=NO_RELATION):
+        self.tree = ID3Node()
+        self._build(data, answers, [], self.tree)
+
+    def _build(self, data, answers, used, node):
+        if len(np.unique(answers)) == 1 or len(used) == len(data[0]):
+            node.mapping = max(answers, key=answers.count)
+            return
+        min_entropy = None
+        min_feature = None
+        min_mapping = None
+        for feature in range(len(data[0])):
+            if feature in used: continue
+            entropy, mapping = self.entropy_map(feature, data, answers)
+            if min_entropy is None or entropy < min_entropy:
+                min_entropy = entropy
+                min_feature = feature
+                min_mapping = mapping
+        temp = list(answers)
+        node.default = max(temp, key=temp.count)
+        node.feature = min_feature
+        for feature_value, dataset_subset in min_mapping.items():
+            data_subset, target_subset = zip(*dataset_subset)
+            node.mapping[feature_value] = ID3Node()
+            self._build(data_subset, target_subset,
+                    used+[min_feature], node.mapping[feature_value])
+
+    def entropy_map(self, feature, dataset, targets):
+        mapping = {}
+        for data, target in zip(dataset, targets):
+            if data[feature] not in mapping.keys():
+                mapping[data[feature]] = []
+            mapping[data[feature]].append((data, target))
+        entropy = sum([calc_entropy([t for d, t in s])*len(s)/len(dataset)
+                for s in mapping.values()])
+        return entropy, mapping
+
+    def predict(self, dataset):
+        prediction = []
+        for data in dataset:
+            node = self.tree
+            while isinstance(node.mapping, dict):
+                if data[node.feature] not in node.mapping.keys():
+                    node = type('node', (object,), { 'mapping': node.default })
+                    break
+                node = node.mapping[data[node.feature]]
+            prediction.append(node.mapping)
+        return prediction
 
 class MLSeed():
     def __init__(self):
@@ -161,6 +222,8 @@ def classify_me(ml_seed):
     if ml_seed.classifier == KNNC:
         return KNearestNeighbors(
                 ml_seed.number_of_neighbors, ml_seed.normalize_my_data)
+    elif ml_seed.classifier == ID3C:
+        return ID3Tree()
     elif ml_seed.classifier == HCC:
         return HardCoded(ml_seed.normalize_my_data)
     return HardCoded()
