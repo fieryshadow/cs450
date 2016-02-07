@@ -8,14 +8,15 @@ from sklearn.neighbors import KNeighborsClassifier
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.metrics.cluster import entropy as calc_entropy
 
-CAR = 'car'
 IRIS = 'iris'
+CAR = 'car'
 WINE = 'wine'
-KNNC = 'kNN'
 LENSES = 'lenses'
 VOTING = 'voting'
 CREDIT = 'credit'
 CHESS = 'chess'
+PIMA = 'pima'
+KNNC = 'kNN'
 ID3C = 'ID3'
 HCC = 'HC'
 DEFAULT_NEIGHBORS = 3
@@ -201,6 +202,10 @@ def make_sane_data(ml_seed):
             ml_seed.dataset = 'https://archive.ics.uci.edu/ml/machine-'\
                     'learning-databases/chess/king-rook-vs-king/krkopt.data'
             ml_seed.target_pos = 6
+        elif name == PIMA:
+            ml_seed.dataset = 'https://archive.ics.uci.edu/ml/machine-learning'\
+                    '-databases/pima-indians-diabetes/pima-indians-diabetes.data'
+            ml_seed.target_pos = 8
         else: name = 'loaded'
         raw = np.array(pd.io.parsers.read_csv(
             ml_seed.dataset, sep=sep, header=None))
