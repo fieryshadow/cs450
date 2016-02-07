@@ -18,6 +18,7 @@ CHESS = 'chess'
 PIMA = 'pima'
 KNNC = 'kNN'
 ID3C = 'ID3'
+NNC = 'NN'
 HCC = 'HC'
 DEFAULT_NEIGHBORS = 3
 CMF_ACTUAL = 'cmf_actual'
@@ -127,6 +128,44 @@ class ID3Tree():
                 node = node.mapping[data[node.feature]]
             prediction.append(node.mapping)
         return prediction
+
+class Neuron():
+    def __init__(self, num_in):
+        self.weights = np.array([random.uniform(-1, 1) for i in range(num_in+1)])
+
+    def get_output(self, inputs):
+        value = self.weights[0] + (self.weights[1:] * inputs).sum()
+        return 1 if value > 0 else 0
+
+class NeuralLayer():
+    def __init__(self, num_in, num_out):
+        #self.num_in = num_in
+        #self.num_out = num_out
+        self.neurons = np.array([Neuron(num_in) for i in range(num_out)])
+
+    def get_output(self, inputs):
+        return np.array([neuron.get_output(inputs) for neuron in self.neurons])
+
+class NeuralNetwork():
+    def __init__(self):
+        self.target_names = []
+        self.layers = []
+
+    def train(self, data, targets, relation=NO_RELATION):
+        self.target_names = np.unique(targets)
+        self.layers = [NeuralLayer(len(data[0]), len(self.target_names))]
+
+    def predict(self, data):
+        prediction = []
+        for i, d in enumerate(data):
+            for layer in self.layers:
+                d = layer.get_output(d)
+            prediction.append(self.indexof(1, d))
+        return [self.target_names[i] for i in prediction]
+
+    def indexof(self, value, array):
+        axis = np.nonzero(array==value)[0]
+        return axis[0] if axis.size else 0
 
 class MLSeed():
     def __init__(self):
@@ -253,6 +292,8 @@ def classify_me(ml_seed):
         return KNearestNeighbors(k)
     elif ml_seed.classifier == ID3C:
         return ID3Tree()
+    elif ml_seed.classifier == NNC:
+        return NeuralNetwork()
     elif ml_seed.classifier == HCC:
         return HardCoded()
     return HardCoded()
