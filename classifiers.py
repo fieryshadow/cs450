@@ -39,26 +39,17 @@ class HardCoded:
 
 class KNearestNeighbors:
     '''The k-Nearest Neighbors algorithm.'''
-    def __init__(self, k, normalize=True):
+    def __init__(self, k):
         self.k = k
         self.targets = []
         self.relation = NO_RELATION
-        self.normalize = normalize
-        self.normalizer = type(
-                'notransform', (object,), { 'transform': lambda x:x })
 
     def train(self, data, answers, relation=NO_RELATION):
         self.relation = relation
-        data = np.array(data)
-        if self.normalize and relation == LINEAR:
-            self.normalizer = prep.MinMaxScaler().fit(data.astype(float))
-            data = self.normalizer.transform(data)
         self.targets = list(zip(data, answers))
 
     def predict(self, data):
         d_rank = self.rank_l if self.relation == LINEAR else self.rank_n
-        if self.normalize and self.relation == LINEAR:
-            data = self.normalizer.transform(data)
         prediction = []
         t_data = self.targets
         for item in data:
@@ -259,7 +250,7 @@ def classify_me(ml_seed):
     if ml_seed.classifier.startswith(KNNC):
         _, param = ml_seed.classifier.split(':')
         k = int(param or DEFAULT_NEIGHBORS)
-        return KNearestNeighbors(k, ml_seed.normalize_my_data)
+        return KNearestNeighbors(k)
     elif ml_seed.classifier == ID3C:
         return ID3Tree()
     elif ml_seed.classifier == HCC:
@@ -333,6 +324,11 @@ def convert_to_zero_one(matrix):
             percents[i][j] = round(elem/s, 2)
     return percents
 
+def make_normalizer(data):
+    data = np.array(data)
+    normalizer = prep.MinMaxScaler().fit(data.astype(float))
+    return normalizer.transform
+
 def cross_val_score(classifier, data, target, labels, clf2, ml_seed):
     k = max(0, min(ml_seed.cross_folds, len(data)))
     step = len(data) // k
@@ -340,18 +336,31 @@ def cross_val_score(classifier, data, target, labels, clf2, ml_seed):
     results_real = np.zeros(k)
     confusion_matrices = []
     confusion_matrices_real = []
+    normalizer = make_normalizer(data)
     for i, pos in zip(range(0, len(data), step), range(k)):
         train_set = np.vstack((data[:i], data[i+step:]))
         train_key = np.hstack((target[:i], target[i+step:]))
         test_set = data[i:i+step]
         test_key = target[i:i+step]
 
-        classifier.train(train_set, train_key, ml_seed.relation)
-        prediction = classifier.predict(test_set)
+        if ml_seed.normalize_my_data:
+            my_train_set = normalizer(train_set)
+            my_test_set = normalizer(test_set)
+        else:
+            my_train_set = train_set
+            my_test_set = test_set
+        classifier.train(my_train_set, train_key, ml_seed.relation)
+        prediction = classifier.predict(my_test_set)
         results[pos] = metrics.accuracy_score(test_key, prediction)
 
-        clf2.fit(train_set, train_key)
-        prediction_real = clf2.predict(test_set)
+        if ml_seed.normalize_their_data:
+            their_train_set = normalizer(train_set)
+            their_test_set = normalizer(test_set)
+        else:
+            their_train_set = train_set
+            their_test_set = test_set
+        clf2.fit(their_train_set, train_key)
+        prediction_real = clf2.predict(their_test_set)
         results_real[pos] = metrics.accuracy_score(test_key, prediction_real)
 
         confusion_matrices.append(
@@ -368,17 +377,30 @@ def cross_val_score(classifier, data, target, labels, clf2, ml_seed):
     return results, results_real, confusion_matrix, confusion_matrix_real
 
 def train_test_score(classifier, data, target, labels, clf2, ml_seed):
+    normalizer = make_normalizer(data)
     split_point = round(ml_seed.split_ratio * len(data))
     train_set =   data[:split_point]
     train_key = target[:split_point]
     test_set  =   data[split_point:]
     test_key  = target[split_point:]
 
-    classifier.train(train_set, train_key, ml_seed.relation)
-    prediction = classifier.predict(test_set)
+    if ml_seed.normalize_my_data:
+        my_train_set = normalizer(train_set)
+        my_test_set = normalizer(test_set)
+    else:
+        my_train_set = train_set
+        my_test_set = test_set
+    classifier.train(my_train_set, train_key, ml_seed.relation)
+    prediction = classifier.predict(my_test_set)
 
-    clf2.fit(train_set, train_key)
-    prediction_real = clf2.predict(test_set)
+    if ml_seed.normalize_their_data:
+        their_train_set = normalizer(train_set)
+        their_test_set = normalizer(test_set)
+    else:
+        their_train_set = train_set
+        their_test_set = test_set
+    clf2.fit(their_train_set, train_key)
+    prediction_real = clf2.predict(their_test_set)
 
     accuracy = metrics.accuracy_score(test_key, prediction)
     accuracy_real = metrics.accuracy_score(test_key, prediction_real)
