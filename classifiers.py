@@ -135,37 +135,41 @@ class Neuron():
 
     def get_output(self, inputs):
         value = self.weights[0] + (self.weights[1:] * inputs).sum()
-        return 1 if value > 0 else 0
+        return self.sigmoid(value)
+
+    def sigmoid(self, value):
+        e_x = 2.718281828 ** (-value)
+        return 1 / (1 + e_x)
 
 class NeuralLayer():
     def __init__(self, num_in, num_out):
-        #self.num_in = num_in
-        #self.num_out = num_out
         self.neurons = np.array([Neuron(num_in) for i in range(num_out)])
 
     def get_output(self, inputs):
         return np.array([neuron.get_output(inputs) for neuron in self.neurons])
 
 class NeuralNetwork():
-    def __init__(self):
+    def __init__(self, hidden=[]):
         self.target_names = []
+        self.hidden = hidden
         self.layers = []
 
     def train(self, data, targets, relation=NO_RELATION):
         self.target_names = np.unique(targets)
-        self.layers = [NeuralLayer(len(data[0]), len(self.target_names))]
+        prev_amount = len(data[0])
+        self.layers = []
+        for amount in self.hidden:
+            self.layers.append(NeuralLayer(prev_amount, amount))
+            prev_amount = amount
+        self.layers.append(NeuralLayer(prev_amount, len(self.target_names)))
 
     def predict(self, data):
         prediction = []
         for i, d in enumerate(data):
             for layer in self.layers:
                 d = layer.get_output(d)
-            prediction.append(self.indexof(1, d))
-        return [self.target_names[i] for i in prediction]
-
-    def indexof(self, value, array):
-        axis = np.nonzero(array==value)[0]
-        return axis[0] if axis.size else 0
+            prediction.append(self.target_names[np.argmax(d)])
+        return prediction
 
 class MLSeed():
     def __init__(self):
@@ -292,7 +296,11 @@ def classify_me(ml_seed):
         return KNearestNeighbors(k)
     elif ml_seed.classifier == ID3C:
         return ID3Tree()
-    elif ml_seed.classifier == NNC:
+    elif ml_seed.classifier.startswith(NNC):
+        _, param = ml_seed.classifier.split(':')
+        if param:
+            hidden = map(int, param.split(','))
+            return NeuralNetwork(hidden)
         return NeuralNetwork()
     elif ml_seed.classifier == HCC:
         return HardCoded()
