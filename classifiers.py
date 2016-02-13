@@ -135,11 +135,7 @@ class Neuron():
 
     def get_output(self, inputs):
         value = self.weights[0] + (self.weights[1:] * inputs).sum()
-        return self.sigmoid(value)
-
-    def sigmoid(self, value):
-        e_x = 2.718281828 ** (-value)
-        return 1 / (1 + e_x)
+        return 1 / (1 + np.exp(-value))
 
 class NeuralLayer():
     def __init__(self, num_in, num_out):
