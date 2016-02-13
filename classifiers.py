@@ -483,7 +483,8 @@ def main():
     percentage = int(round(100 * accuracy))
     percentage_real = int(round(100 * accuracy_real))
     if ml_seed.confusion_matrix_format == CMF_ZERO_ONE:
-        np.set_printoptions(formatter={'float':lambda x:'{:.2f}'.format(x)[1:]})
+        np.set_printoptions(formatter={
+            'float':lambda x:'{:.2f}'.format(x)[1:] if x else '.__'})
         c_matrix.values = convert_to_zero_one(c_matrix.values)
         c_matrix_real.values = convert_to_zero_one(c_matrix_real.values)
     else:
