@@ -1,11 +1,13 @@
 print('Loading code...')
-import sys
-import random
 import numpy as np
-import pandas as pd
-from sklearn import datasets, metrics, cluster, preprocessing as prep
+from sys import argv as sys_argv
+from pandas.io.parsers import read_csv as load_dataset
+from sklearn.cluster import KMeans
+from sklearn.datasets import load_iris
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.tree import DecisionTreeClassifier
+from sklearn.preprocessing import MinMaxScaler, LabelEncoder
+from sklearn.metrics import accuracy_score as calc_accuracy
 from sklearn.metrics.cluster import entropy as calc_entropy
 
 IRIS = 'iris'
@@ -131,7 +133,8 @@ class ID3Tree():
 
 class Neuron():
     def __init__(self, num_in):
-        self.weights = np.array([random.uniform(-1, 1) for i in range(num_in+1)])
+        self.weights = np.array(
+                [np.random.uniform(-1, 1) for i in range(num_in+1)])
 
     def get_output(self, inputs):
         value = self.weights[0] + (self.weights[1:] * inputs).sum()
@@ -196,7 +199,7 @@ class MLSeed():
 def make_sane_data(ml_seed):
     if ml_seed.dataset == IRIS:
         ml_seed.relation = LINEAR
-        raw = datasets.load_iris()
+        raw = load_iris()
         data = raw.data
         target_names = raw.target_names
         target = [target_names[i] for i in raw.target]
@@ -237,12 +240,11 @@ def make_sane_data(ml_seed):
                     '-databases/pima-indians-diabetes/pima-indians-diabetes.data'
             ml_seed.target_pos = 8
         else: name = 'loaded'
-        raw = np.array(pd.io.parsers.read_csv(
-            ml_seed.dataset, sep=sep, header=None))
+        raw = np.array(load_dataset(ml_seed.dataset, sep=sep, header=None))
         pos = ml_seed.target_pos
         data = np.hstack((raw[:,:pos], raw[:,pos+1:]))
         if ml_seed.relation != LINEAR:
-            le = prep.LabelEncoder()
+            le = LabelEncoder()
             data = np.vstack(np.transpose(
                 [le.fit_transform(data[:,i]) for i in range(len(data[0]))]))
         target = raw[:,pos]
@@ -271,13 +273,11 @@ def make_sane_data(ml_seed):
             features = ['feature{}'.format(i) for i in range(1, len(data[0])+1)]
 
     if ml_seed.randomize_data:
-        randomized = list(zip(data, target))
-        random.shuffle(randomized)
-        data, target = zip(*randomized)
+        data, target = zip(*np.random.permutation(list(zip(data, target))))
 
     if ml_seed.clusterize:
         data = np.array(data)
-        km = cluster.KMeans(n_clusters=ml_seed.clusterize)
+        km = KMeans(n_clusters=ml_seed.clusterize)
         data = np.vstack(np.transpose([km.fit_predict(
             data[:,i].reshape(-1, 1)) for i in range(len(data[0]))]))
 
@@ -313,7 +313,7 @@ def classify_them(ml_seed):
 
 def parse_args():
     ml_seed = MLSeed()
-    for arg in sys.argv[1:]:
+    for arg in sys_argv[1:]:
         if arg.startswith('-a='):
             ml_seed.classifier = arg[3:]
         elif arg.startswith('-A='):
@@ -371,7 +371,7 @@ def convert_to_zero_one(matrix):
 
 def make_normalizer(data):
     data = np.array(data)
-    normalizer = prep.MinMaxScaler().fit(data.astype(float))
+    normalizer = MinMaxScaler().fit(data.astype(float))
     return normalizer.transform
 
 def cross_val_score(classifier, data, target, labels, clf2, ml_seed):
@@ -396,7 +396,7 @@ def cross_val_score(classifier, data, target, labels, clf2, ml_seed):
             my_test_set = test_set
         classifier.train(my_train_set, train_key, ml_seed.relation)
         prediction = classifier.predict(my_test_set)
-        results[pos] = metrics.accuracy_score(test_key, prediction)
+        results[pos] = calc_accuracy(test_key, prediction)
 
         if ml_seed.normalize_their_data:
             their_train_set = normalizer(train_set)
@@ -406,7 +406,7 @@ def cross_val_score(classifier, data, target, labels, clf2, ml_seed):
             their_test_set = test_set
         clf2.fit(their_train_set, train_key)
         prediction_real = clf2.predict(their_test_set)
-        results_real[pos] = metrics.accuracy_score(test_key, prediction_real)
+        results_real[pos] = calc_accuracy(test_key, prediction_real)
 
         confusion_matrices.append(
                 make_confusion_matrix(labels, test_key, prediction))
@@ -447,8 +447,8 @@ def train_test_score(classifier, data, target, labels, clf2, ml_seed):
     clf2.fit(their_train_set, train_key)
     prediction_real = clf2.predict(their_test_set)
 
-    accuracy = metrics.accuracy_score(test_key, prediction)
-    accuracy_real = metrics.accuracy_score(test_key, prediction_real)
+    accuracy = calc_accuracy(test_key, prediction)
+    accuracy_real = calc_accuracy(test_key, prediction_real)
     confusion_matrix = make_confusion_matrix(labels, test_key, prediction)
     confusion_matrix_real = \
             make_confusion_matrix(labels, test_key, prediction_real)
