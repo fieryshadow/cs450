@@ -1,4 +1,4 @@
-print('Loading code...')
+print('Loading code...', end='\r')
 import numpy as np
 from sys import argv as sys_argv
 from pandas.io.parsers import read_csv as load_dataset
@@ -172,7 +172,7 @@ class NeuralLayer():
             neuron.weights -= delta
 
 class NeuralNetwork():
-    def __init__(self, hidden=None, num_epochs=None,
+    def __init__(self, ml_seed, hidden=None, num_epochs=None,
             momentum=None, learning_rate=None):
         self.learning_rate = learning_rate or DEFAULT_LEARNING_RATE
         self.num_epochs = num_epochs or DEFAULT_NUM_EPOCHS
@@ -180,6 +180,8 @@ class NeuralNetwork():
         self.hidden = hidden or []
         self.target_names = []
         self.layers = []
+        self.show_epoch_stats = ml_seed.show_epoch_accuracy
+        self.show_epoch_num = ml_seed.show_epoch_num
 
     def make_layers(self, start_num, end_num):
         self.layers = []
@@ -197,8 +199,8 @@ class NeuralNetwork():
         dt = np.array(list(zip(data, targets)))
         for i in range(self.num_epochs):
             np.random.shuffle(dt)
-            # progress feedback for user - this takes lots of time...
-            if i % 13 == 0: print('Entering epoch', i+1, 'of', self.num_epochs)
+            if self.show_epoch_num:
+                print('In epoch {}/{}'.format(i+1, self.num_epochs), end='\r')
             accuracy.append([])
             for d, t in dt:
                 real_out = self.get_output(d)
@@ -210,9 +212,13 @@ class NeuralNetwork():
                 for layer in reversed(self.layers):
                     layer.update_weights(self.learning_rate, self.momentum)
             accuracy[-1] = sum(accuracy[-1])/len(accuracy[-1])
-        print('\nAccuracies through all epochs (x/1000):')
-        print(np.array(list(map(int, map(round, 1000 * np.array(accuracy))))))
-        print('Finished', self.num_epochs, 'epochs')
+        if self.show_epoch_num:
+            print('Finished processing', self.num_epochs, 'epochs')
+        if self.show_epoch_stats:
+            print('\nAccuracies for each epoch of the most recent training:')
+            np.set_printoptions(
+                    formatter={'float':lambda x:'{:.3f}'.format(x)[1:]})
+            print(np.array(accuracy))
 
     def get_output(self, data):
         for layer in self.layers:
@@ -242,6 +248,8 @@ class MLSeed():
         self.show_recall = False
         self.show_f_measure = False
         self.show_tree = False
+        self.show_epoch_accuracy = False
+        self.show_epoch_num = True
         self.dataset = IRIS
         self.target_pos = 0
         self.compare_classifier = KNNC
@@ -392,6 +400,10 @@ def parse_args():
             ml_seed.show_tree = True
         elif arg.startswith('-C='):
             ml_seed.clusterize = int(arg[3:] or ml_seed.clusterize)
+        elif arg.startswith('-e'):
+            ml_seed.show_epoch_accuracy = True
+        elif arg.startswith('-E'):
+            ml_seed.show_epoch_num = False
     return ml_seed
 
 def display_tree(tree, level=0, pre='->'):
@@ -509,14 +521,14 @@ def train_test_score(classifier, data, target, labels, clf2, ml_seed):
     return accuracy, accuracy_real, confusion_matrix, confusion_matrix_real
 
 def main():
-    print('Loading data...')
+    print('Retrieving data...', end='\r')
     ml_seed = parse_args()
     dataset = make_sane_data(ml_seed)
     data, target, labels = dataset.data, dataset.target, dataset.target_names
     classifier = classify_me(ml_seed)
     clf2 = classify_them(ml_seed)
 
-    print('Processing data...')
+    print('Learning structures...')
     if ml_seed.cross_folds > 1:
         scores, scores_real, c_matrix, c_matrix_real = cross_val_score(
                 classifier, data, target, labels, clf2, ml_seed)
