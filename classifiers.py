@@ -339,11 +339,12 @@ def classify_me(ml_seed):
     elif ml_seed.classifier == ID3C:
         return ID3Tree()
     elif ml_seed.classifier.startswith(NNC):
-        _, param = ml_seed.classifier.split(':')
-        if param:
-            hidden = map(int, param.split(','))
-            return NeuralNetwork(hidden)
-        return NeuralNetwork()
+        params = ml_seed.classifier.split(':')
+        length = len(params)
+        hidden = map(int, params[1].split(',')) if length > 1 else []
+        epochs = int(params[2]) if length > 2 else DEFAULT_NUM_EPOCHS
+        learn_rate = float(params[3]) if length > 3 else DEFAULT_LEARNING_RATE
+        return NeuralNetwork(hidden, epochs, learn_rate)
     elif ml_seed.classifier == HCC:
         return HardCoded()
     return HardCoded()
