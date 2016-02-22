@@ -31,6 +31,19 @@ CMF_ZERO_ONE = 'cmf_zero_one'
 CMF_NO_FORCE = 'cmf_no_force'
 NO_RELATION = 0
 LINEAR = 1
+DATASET_NAMES = [CAR, WINE, LENSES, VOTING, CREDIT, CHESS, PIMA]
+RELATIONS = dict(zip(DATASET_NAMES, 2*[LINEAR] + 5*[NO_RELATION]))
+TARGET_COLS = dict(zip(DATASET_NAMES, [6, 0, 5, 0, 15, 6, 8]))
+WEBSITES = dict(zip(DATASET_NAMES, map(
+    lambda x:'https://archive.ics.uci.edu/ml/machine-learning-databases'+x, '''
+/car/car.data
+/wine/wine.data
+/lenses/lenses.data
+/voting-records/house-votes-84.data
+/credit-screening/crx.data
+/chess/king-rook-vs-king/krkopt.data
+/pima-indians-diabetes/pima-indians-diabetes.data
+'''.strip().split('\n'))))
 
 class HardCoded:
     '''A hard coded, same answer always algorithm.'''
@@ -68,7 +81,7 @@ class KNearestNeighbors:
         return prediction
 
     def rank_l(self, item, t_item, t_answer):
-        dist = ((item - t_item)**2).sum()
+        dist = ((item - t_item) ** 2).sum()
         return dist, t_item, t_answer
 
     def rank_n(self, item, t_item, t_answer):
@@ -118,7 +131,7 @@ class ID3Tree():
             if data[feature] not in mapping.keys():
                 mapping[data[feature]] = []
             mapping[data[feature]].append((data, target))
-        entropy = sum([calc_entropy([t for d, t in s])*len(s)/len(dataset)
+        entropy = sum([calc_entropy([t for d, t in s]) * len(s) / len(dataset)
                 for s in mapping.values()])
         return entropy, mapping
 
@@ -137,8 +150,8 @@ class ID3Tree():
 class Neuron():
     def __init__(self, num_in):
         self.weights = np.array(
-                [np.random.uniform(-1, 1) for i in range(num_in+1)])
-        self.prev_delta = np.zeros(num_in+1)
+                [np.random.uniform(-1, 1) for i in range(num_in + 1)])
+        self.prev_delta = np.zeros(num_in + 1)
         self.activation = 0
         self.error = 0
 
@@ -174,14 +187,14 @@ class NeuralLayer():
 class NeuralNetwork():
     def __init__(self, ml_seed, hidden=None, num_epochs=None,
             momentum=None, learning_rate=None):
+        self.show_epoch_num = ml_seed.show_epoch_num
+        self.show_epoch_stats = ml_seed.show_epoch_accuracy
         self.learning_rate = learning_rate or DEFAULT_LEARNING_RATE
         self.num_epochs = num_epochs or DEFAULT_NUM_EPOCHS
         self.momentum = momentum or DEFAULT_MOMENTUM
         self.hidden = hidden or []
         self.target_names = []
         self.layers = []
-        self.show_epoch_stats = ml_seed.show_epoch_accuracy
-        self.show_epoch_num = ml_seed.show_epoch_num
 
     def make_layers(self, start_num, end_num):
         self.layers = []
@@ -198,20 +211,21 @@ class NeuralNetwork():
         accuracy = []
         dt = np.array(list(zip(data, targets)))
         for i in range(self.num_epochs):
-            np.random.shuffle(dt)
+            np.random.shuffle(dt) # make sure NN doesn't learn feed ordering
             if self.show_epoch_num:
                 print('In epoch {}/{}'.format(i+1, self.num_epochs), end='\r')
             accuracy.append([])
             for d, t in dt:
                 real_out = self.get_output(d)
-                nlayer = (self.target_names==t).astype(int) # ideal outputs
-                accuracy[-1].append(1*(np.argmax(real_out)==np.argmax(nlayer)))
+                nlayer = (self.target_names == t).astype(int) # ideal outputs
+                accuracy[-1].append(
+                        (np.argmax(real_out) == np.argmax(nlayer)) * 1)
                 for layer in reversed(self.layers):
                     layer.calculate_error(nlayer)
                     nlayer = layer
                 for layer in reversed(self.layers):
                     layer.update_weights(self.learning_rate, self.momentum)
-            accuracy[-1] = sum(accuracy[-1])/len(accuracy[-1])
+            accuracy[-1] = sum(accuracy[-1]) / len(accuracy[-1])
         if self.show_epoch_num:
             print('Finished processing', self.num_epochs, 'epochs')
         if self.show_epoch_stats:
@@ -263,42 +277,15 @@ def make_sane_data(ml_seed):
         data = raw.data
         target_names = raw.target_names
         target = [target_names[i] for i in raw.target]
-        features = ['sepal length', 'sepal width', 'pedal length', 'pedal width']
+        features = ['sepalL', 'sepalW', 'pedalL', 'pedalW']
         name = 'iris'
     else:
-        sep = ','
         name = ml_seed.dataset
-        if name == CAR:
-            ml_seed.dataset = 'http://archive.ics.uci.edu/ml/'\
-                    'machine-learning-databases/car/car.data'
-            ml_seed.relation = LINEAR
-            ml_seed.target_pos = 6
-        elif name == WINE:
-            ml_seed.dataset = 'http://archive.ics.uci.edu/ml/'\
-                    'machine-learning-databases/wine/wine.data'
-            ml_seed.relation = LINEAR
-            ml_seed.target_pos = 0
-        elif name == LENSES:
-            ml_seed.dataset = 'https://archive.ics.uci.edu/ml/'\
-                    'machine-learning-databases/lenses/lenses.data'
-            ml_seed.target_pos = 5
-            sep = '\s+' # whitespace
-        elif name == VOTING:
-            ml_seed.dataset = 'https://archive.ics.uci.edu/ml/machine-'\
-                    'learning-databases/voting-records/house-votes-84.data'
-            ml_seed.target_pos = 0
-        elif name == CREDIT:
-            ml_seed.dataset = 'https://archive.ics.uci.edu/ml/'\
-                    'machine-learning-databases/credit-screening/crx.data'
-            ml_seed.target_pos = 15
-        elif name == CHESS:
-            ml_seed.dataset = 'https://archive.ics.uci.edu/ml/machine-'\
-                    'learning-databases/chess/king-rook-vs-king/krkopt.data'
-            ml_seed.target_pos = 6
-        elif name == PIMA:
-            ml_seed.dataset = 'https://archive.ics.uci.edu/ml/machine-learning'\
-                    '-databases/pima-indians-diabetes/pima-indians-diabetes.data'
-            ml_seed.target_pos = 8
+        sep = '\s+' if name == LENSES else ','
+        if name in DATASET_NAMES:
+            ml_seed.dataset = WEBSITES[name]
+            ml_seed.relation = RELATIONS[name]
+            ml_seed.target_pos = TARGET_COLS[name]
         else: name = 'loaded'
         raw = np.array(load_dataset(ml_seed.dataset, sep=sep, header=None))
         pos = ml_seed.target_pos
@@ -319,8 +306,8 @@ def make_sane_data(ml_seed):
                     { '2': 0, '4': 1, 'more': 2 },
                     { 'small': 0, 'med': 1, 'big': 2 },
                     { 'low': 0, 'med': 1, 'high': 2 }]
-            data = np.array([[conv[i][e] for i, e in enumerate(row)]
-                for row in data])
+            data = np.array(
+                    [[conv[i][e] for i, e in enumerate(row)] for row in data])
             target_names = ['unacc', 'acc', 'good', 'vgood']
         elif name == WINE:
             features = ['Alcohol', 'Malic acid', 'Ash',
@@ -330,7 +317,7 @@ def make_sane_data(ml_seed):
                     'OD280/OD315 of diluted wines', 'Proline']
             target_names = [1, 2, 3]
         else:
-            features = ['feature{}'.format(i) for i in range(1, len(data[0])+1)]
+            features = ['feature' + str(i) for i in range(1, len(data[0]) + 1)]
 
     if ml_seed.randomize_data:
         data, target = zip(*np.random.permutation(list(zip(data, target))))
@@ -432,7 +419,7 @@ def convert_to_zero_one(matrix):
     s = matrix.sum()
     for i, row in enumerate(matrix):
         for j, elem in enumerate(row):
-            percents[i][j] = round(elem/s, 2)
+            percents[i][j] = round(elem / s, 2)
     return percents
 
 def make_normalizer(data):
@@ -516,8 +503,8 @@ def train_test_score(classifier, data, target, labels, clf2, ml_seed):
     accuracy = calc_accuracy(test_key, prediction)
     accuracy_real = calc_accuracy(test_key, prediction_real)
     confusion_matrix = make_confusion_matrix(labels, test_key, prediction)
-    confusion_matrix_real = \
-            make_confusion_matrix(labels, test_key, prediction_real)
+    confusion_matrix_real = make_confusion_matrix(
+            labels, test_key, prediction_real)
     return accuracy, accuracy_real, confusion_matrix, confusion_matrix_real
 
 def main():
