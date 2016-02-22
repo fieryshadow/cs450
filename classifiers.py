@@ -24,6 +24,7 @@ NNC = 'NN'
 HCC = 'HC'
 DEFAULT_LEARNING_RATE = .1
 DEFAULT_NUM_EPOCHS = 77
+DEFAULT_MOMENTUM = .2
 DEFAULT_NEIGHBORS = 3
 CMF_ACTUAL = 'cmf_actual'
 CMF_ZERO_ONE = 'cmf_zero_one'
@@ -137,6 +138,7 @@ class Neuron():
     def __init__(self, num_in):
         self.weights = np.array(
                 [np.random.uniform(-1, 1) for i in range(num_in+1)])
+        self.prev_delta = np.zeros(num_in+1)
         self.activation = 0
         self.error = 0
 
@@ -161,16 +163,20 @@ class NeuralLayer():
                     sum(n.error * n.weights[i+1] for n in nlayer.neurons)
             neuron.error = neuron.activation * (1 - neuron.activation) * third
 
-    def update_weights(self, rate):
+    def update_weights(self, learning_rate, momentum):
         for neuron in self.neurons:
-            rne = rate * neuron.error
-            delta = np.array([rne*activation for activation in self.inputs])
+            rne = learning_rate * neuron.error
+            delta = np.array([rne * activation for activation in self.inputs])
+            delta += momentum * neuron.prev_delta
+            neuron.prev_delta = -delta
             neuron.weights -= delta
 
 class NeuralNetwork():
-    def __init__(self, hidden=None, num_epochs=None, learning_rate=None):
+    def __init__(self, hidden=None, num_epochs=None,
+            momentum=None, learning_rate=None):
         self.learning_rate = learning_rate or DEFAULT_LEARNING_RATE
         self.num_epochs = num_epochs or DEFAULT_NUM_EPOCHS
+        self.momentum = momentum or DEFAULT_MOMENTUM
         self.hidden = hidden or []
         self.target_names = []
         self.layers = []
@@ -202,7 +208,7 @@ class NeuralNetwork():
                     layer.calculate_error(nlayer)
                     nlayer = layer
                 for layer in reversed(self.layers):
-                    layer.update_weights(self.learning_rate)
+                    layer.update_weights(self.learning_rate, self.momentum)
             accuracy[-1] = sum(accuracy[-1])/len(accuracy[-1])
         print('\nAccuracies through all epochs (x/1000):')
         print(np.array(list(map(int, map(round, 1000 * np.array(accuracy))))))
@@ -343,8 +349,9 @@ def classify_me(ml_seed):
         length = len(params)
         hidden = map(int, params[1].split(',')) if length > 1 else []
         epochs = int(params[2]) if length > 2 else DEFAULT_NUM_EPOCHS
-        learn_rate = float(params[3]) if length > 3 else DEFAULT_LEARNING_RATE
-        return NeuralNetwork(hidden, epochs, learn_rate)
+        momentum = float(params[3]) if length > 3 else DEFAULT_MOMENTUM
+        learn_rate = float(params[4]) if length > 4 else DEFAULT_LEARNING_RATE
+        return NeuralNetwork(ml_seed, hidden, epochs, momentum, learn_rate)
     elif ml_seed.classifier == HCC:
         return HardCoded()
     return HardCoded()
