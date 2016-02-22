@@ -148,10 +148,11 @@ class ID3Tree():
         return prediction
 
 class Neuron():
-    def __init__(self, num_in):
+    def __init__(self, num_in, batch):
         self.weights = np.array(
                 [np.random.uniform(-1, 1) for i in range(num_in + 1)])
         self.prev_delta = np.zeros(num_in + 1)
+        if batch: self.prev_delta = [self.prev_delta]
         self.activation = 0
         self.error = 0
 
@@ -161,9 +162,10 @@ class Neuron():
         return self.activation
 
 class NeuralLayer():
-    def __init__(self, num_in, num_out):
-        self.neurons = np.array([Neuron(num_in) for i in range(num_out)])
+    def __init__(self, num_in, num_out, batch):
+        self.neurons = np.array([Neuron(num_in, batch) for i in range(num_out)])
         self.inputs = [1] # bias input
+        self.batch = batch
 
     def get_output(self, inputs):
         self.inputs[1:] = inputs # update non bias inputs
@@ -180,13 +182,23 @@ class NeuralLayer():
         for neuron in self.neurons:
             rne = learning_rate * neuron.error
             delta = np.array([rne * activation for activation in self.inputs])
-            delta += momentum * neuron.prev_delta
-            neuron.prev_delta = -delta
-            neuron.weights -= delta
+            if self.batch:
+                delta += momentum * neuron.prev_delta[-1]
+                neuron.prev_delta.append(-delta)
+            else:
+                delta += momentum * neuron.prev_delta
+                neuron.prev_delta = -delta
+                neuron.weights -= delta
+
+    def batch_complete(self):
+        for neuron in self.neurons:
+            neuron.weights += np.array(neuron.prev_delta).sum(axis=0)
+            neuron.prev_delta = [np.zeros(len(neuron.weights))]
 
 class NeuralNetwork():
     def __init__(self, ml_seed, hidden=None, num_epochs=None,
             momentum=None, learning_rate=None):
+        self.batch = ml_seed.batch_processing
         self.show_epoch_num = ml_seed.show_epoch_num
         self.show_epoch_stats = ml_seed.show_epoch_accuracy
         self.learning_rate = learning_rate or DEFAULT_LEARNING_RATE
@@ -200,9 +212,9 @@ class NeuralNetwork():
         self.layers = []
         prev_amount = start_num
         for amount in self.hidden:
-            self.layers.append(NeuralLayer(prev_amount, amount))
+            self.layers.append(NeuralLayer(prev_amount, amount, self.batch))
             prev_amount = amount
-        self.layers.append(NeuralLayer(prev_amount, end_num))
+        self.layers.append(NeuralLayer(prev_amount, end_num, self.batch))
 
     def train(self, data, targets, relation=NO_RELATION):
         self.target_names = np.unique(targets)
@@ -225,6 +237,8 @@ class NeuralNetwork():
                     nlayer = layer
                 for layer in reversed(self.layers):
                     layer.update_weights(self.learning_rate, self.momentum)
+                if self.batch:
+                    for layer in self.layers: layer.batch_complete()
             accuracy[-1] = sum(accuracy[-1]) / len(accuracy[-1])
         if self.show_epoch_num:
             print('Finished processing', self.num_epochs, 'epochs')
@@ -249,6 +263,7 @@ class MLSeed():
         self.relation = NO_RELATION
         self.normalize_my_data = False
         self.normalize_their_data = False
+        self.batch_processing = False
         self.split_ratio = .6
         self.randomize_data = True
         self.randomize_splits = False
@@ -391,6 +406,8 @@ def parse_args():
             ml_seed.show_epoch_accuracy = True
         elif arg.startswith('-E'):
             ml_seed.show_epoch_num = False
+        elif arg.startswith('-b'):
+            ml_seed.batch_processing = True
     return ml_seed
 
 def display_tree(tree, level=0, pre='->'):
