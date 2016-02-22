@@ -22,6 +22,8 @@ KNNC = 'kNN'
 ID3C = 'ID3'
 NNC = 'NN'
 HCC = 'HC'
+DEFAULT_LEARNING_RATE = .1
+DEFAULT_NUM_EPOCHS = 77
 DEFAULT_NEIGHBORS = 3
 CMF_ACTUAL = 'cmf_actual'
 CMF_ZERO_ONE = 'cmf_zero_one'
@@ -135,40 +137,84 @@ class Neuron():
     def __init__(self, num_in):
         self.weights = np.array(
                 [np.random.uniform(-1, 1) for i in range(num_in+1)])
+        self.activation = 0
+        self.error = 0
 
     def get_output(self, inputs):
-        value = self.weights[0] + (self.weights[1:] * inputs).sum()
-        return 1 / (1 + np.exp(-value))
+        weighted_sum = self.weights[0] + (self.weights[1:] * inputs).sum()
+        self.activation = 1 / (1 + np.exp(-weighted_sum))
+        return self.activation
 
 class NeuralLayer():
     def __init__(self, num_in, num_out):
         self.neurons = np.array([Neuron(num_in) for i in range(num_out)])
+        self.inputs = [1] # bias input
 
     def get_output(self, inputs):
+        self.inputs[1:] = inputs # update non bias inputs
         return np.array([neuron.get_output(inputs) for neuron in self.neurons])
 
+    def calculate_error(self, nlayer):
+        hidden = isinstance(nlayer, NeuralLayer)
+        for i, neuron in enumerate(self.neurons):
+            third = neuron.activation - nlayer[i] if not hidden else \
+                    sum(n.error * n.weights[i+1] for n in nlayer.neurons)
+            neuron.error = neuron.activation * (1 - neuron.activation) * third
+
+    def update_weights(self, rate):
+        for neuron in self.neurons:
+            rne = rate * neuron.error
+            delta = np.array([rne*activation for activation in self.inputs])
+            neuron.weights -= delta
+
 class NeuralNetwork():
-    def __init__(self, hidden=[]):
+    def __init__(self, hidden=None, num_epochs=None, learning_rate=None):
+        self.learning_rate = learning_rate or DEFAULT_LEARNING_RATE
+        self.num_epochs = num_epochs or DEFAULT_NUM_EPOCHS
+        self.hidden = hidden or []
         self.target_names = []
-        self.hidden = hidden
         self.layers = []
 
-    def train(self, data, targets, relation=NO_RELATION):
-        self.target_names = np.unique(targets)
-        prev_amount = len(data[0])
+    def make_layers(self, start_num, end_num):
         self.layers = []
+        prev_amount = start_num
         for amount in self.hidden:
             self.layers.append(NeuralLayer(prev_amount, amount))
             prev_amount = amount
-        self.layers.append(NeuralLayer(prev_amount, len(self.target_names)))
+        self.layers.append(NeuralLayer(prev_amount, end_num))
+
+    def train(self, data, targets, relation=NO_RELATION):
+        self.target_names = np.unique(targets)
+        self.make_layers(len(data[0]), len(self.target_names))
+
+        accuracy = []
+        dt = np.array(list(zip(data, targets)))
+        for i in range(self.num_epochs):
+            np.random.shuffle(dt)
+            # progress feedback for user - this takes lots of time...
+            if i % 13 == 0: print('Entering epoch', i+1, 'of', self.num_epochs)
+            accuracy.append([])
+            for d, t in dt:
+                real_out = self.get_output(d)
+                nlayer = (self.target_names==t).astype(int) # ideal outputs
+                accuracy[-1].append(1*(np.argmax(real_out)==np.argmax(nlayer)))
+                for layer in reversed(self.layers):
+                    layer.calculate_error(nlayer)
+                    nlayer = layer
+                for layer in reversed(self.layers):
+                    layer.update_weights(self.learning_rate)
+            accuracy[-1] = sum(accuracy[-1])/len(accuracy[-1])
+        print('\nAccuracies through all epochs (x/1000):')
+        print(np.array(list(map(int, map(round, 1000 * np.array(accuracy))))))
+        print('Finished', self.num_epochs, 'epochs')
+
+    def get_output(self, data):
+        for layer in self.layers:
+            data = layer.get_output(data)
+        return data
 
     def predict(self, data):
-        prediction = []
-        for i, d in enumerate(data):
-            for layer in self.layers:
-                d = layer.get_output(d)
-            prediction.append(self.target_names[np.argmax(d)])
-        return prediction
+        return [self.target_names[np.argmax(self.get_output(d))] for d in data]
 
 class MLSeed():
     def __init__(self):
